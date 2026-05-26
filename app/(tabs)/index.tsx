@@ -1,15 +1,16 @@
 import { useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, FontSize, Radius, Spacing } from "@/constants/theme";
+import { Colors, Radius, Spacing } from "@/constants/theme";
 
 export default function LoginScreen() {
   const [loading] = useState(false);
@@ -34,91 +35,112 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header avec logo et slogan */}
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logoIcon}>
-            <Ionicons name="construct" size={32} color={Colors.brand.white} />
-          </View>
-          <Text style={styles.logoText}>Najda</Text>
+      {/* Hero — logo, nom et slogan */}
+      <View style={styles.hero}>
+        <View style={styles.logoMark}>
+          <Ionicons name="construct" size={42} color={Colors.brand.gold500} />
+          {/* Petit reflet doré en coin pour donner du caractère */}
+          <View style={styles.logoAccent} />
         </View>
+        <Text style={styles.brandName}>Najda</Text>
         <Text style={styles.tagline}>
-          L&apos;artisan qu&apos;il vous faut, quand il vous faut
+          L&apos;artisan qu&apos;il vous faut,{"\n"}quand il vous faut.
         </Text>
       </View>
 
-      {/* Boutons de connexion */}
-      <View style={styles.buttonsContainer}>
+      {/* Section actions */}
+      <View style={styles.actions}>
+        {/* Bouton primaire — Apple (standard iOS) */}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continuer avec Apple"
           style={({ pressed }) => [
             styles.button,
-            styles.buttonGoogle,
+            styles.buttonPrimary,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={handleAppleLogin}
+          disabled={loading}
+        >
+          <Ionicons name="logo-apple" size={20} color={Colors.brand.white} />
+          <Text style={styles.buttonPrimaryText}>Continuer avec Apple</Text>
+        </Pressable>
+
+        {/* Bouton secondaire — Google */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continuer avec Google"
+          style={({ pressed }) => [
+            styles.button,
+            styles.buttonSecondary,
             pressed && styles.buttonPressed,
           ]}
           onPress={handleGoogleLogin}
           disabled={loading}
         >
           <Ionicons name="logo-google" size={20} color={Colors.brand.gray900} />
-          <Text style={styles.buttonTextDark}>Continuer avec Google</Text>
+          <Text style={styles.buttonSecondaryText}>Continuer avec Google</Text>
         </Pressable>
 
+        {/* Bouton secondaire — Email */}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continuer par email"
           style={({ pressed }) => [
             styles.button,
-            styles.buttonApple,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={handleAppleLogin}
-          disabled={loading}
-        >
-          <Ionicons name="logo-apple" size={22} color={Colors.brand.white} />
-          <Text style={styles.buttonTextLight}>Continuer avec Apple</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonEmail,
+            styles.buttonSecondary,
             pressed && styles.buttonPressed,
           ]}
           onPress={handleEmailLogin}
           disabled={loading}
         >
-          <Ionicons name="mail" size={20} color={Colors.brand.gray900} />
-          <Text style={styles.buttonTextDark}>Continuer par email</Text>
+          <Ionicons
+            name="mail-outline"
+            size={20}
+            color={Colors.brand.gray900}
+          />
+          <Text style={styles.buttonSecondaryText}>Continuer par email</Text>
         </Pressable>
 
-        {/* Séparateur OU */}
-        <View style={styles.separator}>
-          <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>OU</Text>
-          <View style={styles.separatorLine} />
-        </View>
-
-        {/* Bouton urgence */}
+        {/* Carte urgence — visuellement distincte */}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Mode dépannage 24 heures sur 24"
           style={({ pressed }) => [
-            styles.button,
-            styles.buttonEmergency,
-            pressed && styles.buttonPressed,
+            styles.emergencyCard,
+            pressed && styles.emergencyCardPressed,
           ]}
           onPress={handleEmergency}
         >
-          <Ionicons name="warning" size={20} color={Colors.brand.danger700} />
-          <Text style={styles.buttonTextEmergency}>
-            Urgence — accès rapide
-          </Text>
+          <View style={styles.emergencyIconBox}>
+            <Ionicons name="flash" size={22} color={Colors.brand.danger500} />
+          </View>
+          <View style={styles.emergencyTextBox}>
+            <Text style={styles.emergencyTitle}>Dépannage 24/7</Text>
+            <Text style={styles.emergencySubtitle}>
+              Sans inscription · réponse en 30 min
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={Colors.brand.danger500}
+          />
         </Pressable>
       </View>
 
-      {/* Mentions légales en bas */}
-      <Text style={styles.legal}>
-        En continuant, vous acceptez nos{"\n"}
-        CGU et notre politique de confidentialité.
-      </Text>
+      {/* Footer — mentions légales */}
+      <View style={styles.footer}>
+        <Text style={styles.legal}>
+          En continuant, vous acceptez nos{" "}
+          <Text style={styles.legalLink}>CGU</Text>
+          {" et notre "}
+          <Text style={styles.legalLink}>politique de confidentialité</Text>.
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -128,108 +150,149 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.brand.white,
     paddingHorizontal: Spacing.lg,
-    justifyContent: "space-between",
-    paddingVertical: Spacing.xl,
   },
-  header: {
+  hero: {
+    flex: 1,
     alignItems: "center",
-    marginTop: Spacing.xxl,
+    justifyContent: "center",
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xl,
   },
-  logoContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  logoIcon: {
-    width: 56,
-    height: 56,
+  logoMark: {
+    width: 92,
+    height: 92,
+    borderRadius: 24,
     backgroundColor: Colors.brand.primary500,
-    borderRadius: Radius.lg,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: Spacing.lg,
+    overflow: "hidden",
+    // Ombre douce violette pour donner du relief
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.brand.primary700,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.28,
+        shadowRadius: 24,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
-  logoText: {
-    fontSize: FontSize.xxxl,
+  logoAccent: {
+    position: "absolute",
+    top: -20,
+    right: -20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: Colors.brand.gold500,
+    opacity: 0.18,
+  },
+  brandName: {
+    fontSize: 44,
     fontWeight: "700",
     color: Colors.brand.gray900,
-    letterSpacing: -0.5,
+    letterSpacing: -1.4,
+    marginBottom: 12,
   },
   tagline: {
-    fontSize: FontSize.md,
+    fontSize: 16,
+    lineHeight: 24,
     color: Colors.brand.gray600,
     textAlign: "center",
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.md,
+    fontWeight: "400",
+    maxWidth: 320,
   },
-  buttonsContainer: {
-    gap: Spacing.sm,
+  actions: {
+    gap: 10,
+    paddingBottom: Spacing.md,
   },
   button: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: 14,
+    gap: 10,
+    height: 54,
+    borderRadius: 14,
     paddingHorizontal: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
   },
   buttonPressed: {
     opacity: 0.85,
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.985 }],
   },
-  buttonGoogle: {
-    backgroundColor: Colors.brand.white,
-    borderColor: Colors.brand.gray200,
-  },
-  buttonApple: {
+  buttonPrimary: {
     backgroundColor: Colors.brand.gray900,
-    borderColor: Colors.brand.gray900,
   },
-  buttonEmail: {
+  buttonPrimaryText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.brand.white,
+    letterSpacing: -0.2,
+  },
+  buttonSecondary: {
     backgroundColor: Colors.brand.white,
+    borderWidth: 1,
     borderColor: Colors.brand.gray200,
   },
-  buttonEmergency: {
-    backgroundColor: Colors.brand.danger50,
-    borderColor: Colors.brand.danger50,
-  },
-  buttonTextDark: {
-    fontSize: FontSize.md,
-    fontWeight: "500",
+  buttonSecondaryText: {
+    fontSize: 16,
+    fontWeight: "600",
     color: Colors.brand.gray900,
+    letterSpacing: -0.2,
   },
-  buttonTextLight: {
-    fontSize: FontSize.md,
-    fontWeight: "500",
-    color: Colors.brand.white,
-  },
-  buttonTextEmergency: {
-    fontSize: FontSize.md,
-    fontWeight: "500",
-    color: Colors.brand.danger700,
-  },
-  separator: {
+  emergencyCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginVertical: Spacing.sm,
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.brand.danger50,
+    borderRadius: 14,
+    marginTop: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.brand.danger100,
   },
-  separatorLine: {
+  emergencyCardPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.99 }],
+  },
+  emergencyIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.brand.danger100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emergencyTextBox: {
     flex: 1,
-    height: 1,
-    backgroundColor: Colors.brand.gray200,
   },
-  separatorText: {
-    fontSize: FontSize.xs,
-    color: Colors.brand.gray400,
-    fontWeight: "500",
+  emergencyTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.brand.danger700,
+    letterSpacing: -0.2,
+  },
+  emergencySubtitle: {
+    fontSize: 12,
+    color: Colors.brand.danger700,
+    opacity: 0.75,
+    marginTop: 2,
+  },
+  footer: {
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   legal: {
-    fontSize: FontSize.xs,
+    fontSize: 12,
+    lineHeight: 18,
     color: Colors.brand.gray400,
     textAlign: "center",
-    lineHeight: 16,
+  },
+  legalLink: {
+    color: Colors.brand.gray800,
+    fontWeight: "500",
   },
 });

@@ -2,48 +2,63 @@ import { Platform } from "react-native";
 
 /**
  * Palette de couleurs Najda
- * Bleu confiance comme couleur principale, avec une gamme complète
- * pour les états (urgence, succès, attente) et les neutres.
+ *
+ * Identité visuelle : violet profond (confiance, modernité) + or (premium,
+ * service haut de gamme) + neutres riches. Le contraste violet/or est la
+ * signature de la marque, à réserver aux éléments forts (logo, badges
+ * premium, accents).
  */
 const brandColors = {
-  // Bleu confiance Najda — couleur principale
-  primary50: "#E6F0FB",
-  primary100: "#C0D8F4",
-  primary200: "#8BB7E8",
-  primary500: "#1E5FB8", // Couleur principale de la marque
-  primary600: "#174A93",
-  primary700: "#11366D",
-  primary900: "#0A1F40",
+  // Violet Najda — couleur principale de la marque
+  primary50: "#F4F3FE",
+  primary100: "#E0DDFB",
+  primary200: "#C0BCF6",
+  primary300: "#918AED", // Fourni — violet clair
+  primary400: "#7063CE", // Fourni — violet moyen
+  primary500: "#2B2891", // Fourni — violet profond, signature
+  primary700: "#1A1761",
+  primary900: "#060530", // Fourni — quasi-noir teinté violet
 
-  // Rouge urgence — pour le mode dépannage 24/7
-  danger50: "#FCEBEB",
+  // Or Najda — accent premium (badges, CTA spéciaux, finitions)
+  gold50: "#FBF5E1",
+  gold100: "#F6E8B8",
+  gold200: "#F1DC9C",
+  gold500: "#ECD287", // Fourni — or signature
+  gold700: "#A88F3E",
+  gold900: "#5F4D17",
+
+  // Rouge urgence — mode dépannage 24/7
+  danger50: "#FDF2F1",
+  danger100: "#FBE1DE",
+  danger200: "#F4B5AE",
   danger500: "#D84A3A",
   danger700: "#7E2A22",
 
-  // Vert succès — pour disponibilité, validation
+  // Vert succès — disponibilité, validation
   success50: "#E1F5EE",
   success500: "#1D9E75",
   success700: "#0F6E56",
 
-  // Orange avertissement — pour créneaux limités, attente
+  // Orange avertissement — créneaux limités
   warning50: "#FAEEDA",
   warning500: "#EF9F27",
   warning700: "#854F0B",
 
-  // Neutres
+  // Neutres — basés sur le quasi-noir Najda pour une cohérence chromatique
   white: "#FFFFFF",
   black: "#000000",
   gray50: "#F7F8FA",
   gray100: "#EEF0F3",
   gray200: "#D8DCE2",
+  gray300: "#C0C5CC",
   gray400: "#9CA3AF",
   gray600: "#6B7280",
-  gray800: "#374151",
-  gray900: "#111827",
+  gray800: "#2E2E3E",
+  gray900: "#060530", // Reprise du primary900 pour unifier
 };
 
 const tintColorLight = brandColors.primary500;
-const tintColorDark = brandColors.white;
+const tintColorDark = brandColors.gold500;
 
 export const Colors = {
   // Couleurs de marque accessibles partout via Colors.brand.xxx
@@ -61,6 +76,7 @@ export const Colors = {
     tabIconSelected: tintColorLight,
     border: brandColors.gray200,
     primary: brandColors.primary500,
+    accent: brandColors.gold500,
     danger: brandColors.danger500,
     success: brandColors.success500,
     warning: brandColors.warning500,
@@ -68,16 +84,17 @@ export const Colors = {
 
   // Thème sombre
   dark: {
-    text: "#ECEDEE",
-    textSecondary: "#9BA1A6",
-    background: "#0F1419",
-    backgroundSecondary: "#1A1F26",
+    text: "#F4F3FE",
+    textSecondary: "#A8A4D4",
+    background: brandColors.primary900,
+    backgroundSecondary: "#0E0C42",
     tint: tintColorDark,
-    icon: "#9BA1A6",
-    tabIconDefault: "#9BA1A6",
+    icon: "#A8A4D4",
+    tabIconDefault: "#7063CE",
     tabIconSelected: tintColorDark,
-    border: "#2A3038",
-    primary: brandColors.primary200,
+    border: "#1A1761",
+    primary: brandColors.primary300,
+    accent: brandColors.gold500,
     danger: "#F09595",
     success: "#5DCAA5",
     warning: "#FAC775",
