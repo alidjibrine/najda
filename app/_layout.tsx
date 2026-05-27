@@ -1,24 +1,31 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: "(auth)",
 };
 
+/**
+ * Layout racine de Najda.
+ *
+ * Wrappe toute l'app dans le AuthProvider pour que l'état de session
+ * soit accessible partout. Définit les deux groupes principaux :
+ *   - (auth) : écrans non connectés (login, email)
+ *   - (app)  : écrans connectés (home, et tout le reste à venir)
+ *
+ * Le routage entre les deux groupes est géré par les <Redirect> placés
+ * dans les layouts respectifs, en fonction de l'état de session.
+ */
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+      <StatusBar style="dark" />
+    </AuthProvider>
   );
 }

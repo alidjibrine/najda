@@ -10,27 +10,40 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Colors, Radius, Spacing } from "@/constants/theme";
 
+/**
+ * Écran d'accueil / connexion de Najda.
+ * Propose les méthodes d'auth (Apple, Google, Email) et l'accès rapide
+ * au mode dépannage 24/7.
+ */
 export default function LoginScreen() {
+  const router = useRouter();
   const [loading] = useState(false);
 
   const handleGoogleLogin = () => {
-    Alert.alert("Bientôt disponible", "La connexion Google arrive bientôt.");
+    Alert.alert(
+      "Bientôt disponible",
+      "La connexion Google arrive dans une prochaine version.",
+    );
   };
 
   const handleAppleLogin = () => {
-    Alert.alert("Bientôt disponible", "La connexion Apple arrive bientôt.");
+    Alert.alert(
+      "Bientôt disponible",
+      "La connexion Apple arrive dans une prochaine version.",
+    );
   };
 
   const handleEmailLogin = () => {
-    Alert.alert("Bientôt disponible", "La connexion par email arrive bientôt.");
+    router.push("/(auth)/email");
   };
 
   const handleEmergency = () => {
     Alert.alert(
       "Mode urgence",
-      "Le mode dépannage 24/7 sera bientôt disponible.",
+      "Le mode dépannage 24/7 arrive dans une prochaine version.",
     );
   };
 
@@ -42,7 +55,6 @@ export default function LoginScreen() {
       <View style={styles.hero}>
         <View style={styles.logoMark}>
           <Ionicons name="construct" size={42} color={Colors.brand.gold500} />
-          {/* Petit reflet doré en coin pour donner du caractère */}
           <View style={styles.logoAccent} />
         </View>
         <Text style={styles.brandName}>Najda</Text>
@@ -53,7 +65,6 @@ export default function LoginScreen() {
 
       {/* Section actions */}
       <View style={styles.actions}>
-        {/* Bouton primaire — Apple (standard iOS) */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Continuer avec Apple"
@@ -69,7 +80,6 @@ export default function LoginScreen() {
           <Text style={styles.buttonPrimaryText}>Continuer avec Apple</Text>
         </Pressable>
 
-        {/* Bouton secondaire — Google */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Continuer avec Google"
@@ -85,7 +95,6 @@ export default function LoginScreen() {
           <Text style={styles.buttonSecondaryText}>Continuer avec Google</Text>
         </Pressable>
 
-        {/* Bouton secondaire — Email */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Continuer par email"
@@ -105,7 +114,6 @@ export default function LoginScreen() {
           <Text style={styles.buttonSecondaryText}>Continuer par email</Text>
         </Pressable>
 
-        {/* Carte urgence — visuellement distincte */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Mode dépannage 24 heures sur 24"
@@ -167,7 +175,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: Spacing.lg,
     overflow: "hidden",
-    // Ombre douce violette pour donner du relief
     ...Platform.select({
       ios: {
         shadowColor: Colors.brand.primary700,
