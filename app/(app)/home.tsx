@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import {
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -11,649 +10,344 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAuth } from "@/contexts/AuthContext";
-import { Colors, Radius, Spacing } from "@/constants/theme";
+import { brand, space, radius, shadow, text as T, comp } from "@/constants/theme";
 
-/**
- * Hub d'accueil de Najda — Phase 1.3.
- *
- * Premier vrai écran de l'app authentifiée. Présente le catalogue des
- * métiers (urgences 24/7 + tous les métiers), la barre de recherche, et
- * un emplacement pour les RDV à venir. Les actions sont des placeholders
- * pour l'instant — elles seront branchées sur les vrais flux en Phase
- * 1.4 (liste artisans) et 1.6 (réservation).
- */
-
-type Category = {
+type Service = {
   id: string;
   name: string;
+  sub: string;
   icon: keyof typeof Ionicons.glyphMap;
-  bg: string;
+  colors: [string, string];
   iconColor: string;
-  available?: number;
+  urgent?: boolean;
 };
 
-const URGENT_CATEGORIES: Category[] = [
-  {
-    id: "plomberie",
-    name: "Plomberie",
-    icon: "water",
-    bg: "#E0E7FF",
-    iconColor: "#3730A3",
-    available: 12,
-  },
-  {
-    id: "serrurerie",
-    name: "Serrurerie",
-    icon: "key",
-    bg: "#FDF2F1",
-    iconColor: "#D84A3A",
-    available: 8,
-  },
-  {
-    id: "electricite",
-    name: "Électricité",
-    icon: "flash",
-    bg: "#FBF5E1",
-    iconColor: "#A88F3E",
-    available: 6,
-  },
-  {
-    id: "chauffage",
-    name: "Chauffage",
-    icon: "flame",
-    bg: "#FAEEDA",
-    iconColor: "#854F0B",
-    available: 4,
-  },
+const SERVICES: Service[] = [
+  { id: "plomberie", name: "Plomberie", sub: "Fuites · Robinets · Canalisations", icon: "water", colors: ["#3B82F6", "#1D4ED8"], iconColor: "#fff", urgent: true },
+  { id: "serrurerie", name: "Serrurerie", sub: "Portes · Serrures · Blindage", icon: "key", colors: ["#EF4444", "#B91C1C"], iconColor: "#fff", urgent: true },
+  { id: "electricite", name: "Électricité", sub: "Pannes · Prises · Tableaux", icon: "flash", colors: ["#F59E0B", "#B45309"], iconColor: "#fff", urgent: true },
+  { id: "chauffage", name: "Chauffage", sub: "Chaudières · Radiateurs", icon: "flame", colors: ["#F97316", "#C2410C"], iconColor: "#fff", urgent: true },
+  { id: "peinture", name: "Peinture", sub: "Intérieur · Extérieur", icon: "color-palette-outline", colors: ["#EDE9FE", "#EDE9FE"], iconColor: "#6D28D9" },
+  { id: "menuiserie", name: "Menuiserie", sub: "Portes · Fenêtres", icon: "hammer-outline", colors: ["#FDF9EE", "#FDF9EE"], iconColor: "#A88F3E" },
+  { id: "maconnerie", name: "Maçonnerie", sub: "Murs · Terrasses", icon: "cube-outline", colors: ["#F3F4F6", "#F3F4F6"], iconColor: "#374151" },
+  { id: "carrelage", name: "Carrelage", sub: "Sols · Murs", icon: "grid-outline", colors: ["#D1FAE5", "#D1FAE5"], iconColor: "#047857" },
+  { id: "climatisation", name: "Climatisation", sub: "Installation · Entretien", icon: "snow-outline", colors: ["#E0F2FE", "#E0F2FE"], iconColor: "#0369A1" },
+  { id: "jardinage", name: "Jardinage", sub: "Entretien · Élagage", icon: "leaf-outline", colors: ["#DCFCE7", "#DCFCE7"], iconColor: "#15803D" },
 ];
 
-const ALL_CATEGORIES: Category[] = [
-  {
-    id: "peinture",
-    name: "Peinture",
-    icon: "color-palette",
-    bg: "#E0DDFB",
-    iconColor: "#2B2891",
-  },
-  {
-    id: "menuiserie",
-    name: "Menuiserie",
-    icon: "hammer",
-    bg: "#F6E8B8",
-    iconColor: "#A88F3E",
-  },
-  {
-    id: "maconnerie",
-    name: "Maçonnerie",
-    icon: "cube",
-    bg: "#EEF0F3",
-    iconColor: "#2E2E3E",
-  },
-  {
-    id: "carrelage",
-    name: "Carrelage",
-    icon: "grid",
-    bg: "#E1F5EE",
-    iconColor: "#0F6E56",
-  },
-  {
-    id: "platrerie",
-    name: "Plâtrerie",
-    icon: "albums",
-    bg: "#FCE7F3",
-    iconColor: "#9F1239",
-  },
-  {
-    id: "climatisation",
-    name: "Climatisation",
-    icon: "snow",
-    bg: "#DBEAFE",
-    iconColor: "#1E40AF",
-  },
-];
-
-/**
- * Extrait un prénom propre depuis un email, ou null si l'email
- * n'a pas de structure permettant un affichage propre.
- */
-function deriveFirstName(email: string | undefined): string | null {
-  if (!email) return null;
-  const prefix = email.split("@")[0];
-  const beforeSeparator = prefix.split(/[._-]/)[0];
-  const cleaned = beforeSeparator.replace(/[^a-zA-Z]/g, "");
-  if (cleaned.length < 2 || cleaned.length > 12) return null;
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+function deriveInitial(email: string | undefined): string {
+  if (!email) return "?";
+  return email.charAt(0).toUpperCase();
 }
 
 export default function HomeScreen() {
   const { user, signOut } = useAuth();
+  const initial = useMemo(() => deriveInitial(user?.email), [user]);
 
-  const firstName = useMemo(() => deriveFirstName(user?.email), [user]);
+  const urgent = SERVICES.filter((sv) => sv.urgent);
+  const other = SERVICES.filter((sv) => !sv.urgent);
 
-  const initial = useMemo(() => {
-    if (!user?.email) return "?";
-    const fromName = deriveFirstName(user.email);
-    return (fromName ?? user.email).charAt(0).toUpperCase();
-  }, [user]);
-
-  const handleCategory = (category: Category) => {
-    Alert.alert(
-      category.name,
-      `La recherche d'artisans en ${category.name.toLowerCase()} arrive en Phase 1.4. Patience !`,
-    );
-  };
-
-  const handleSearch = () => {
-    Alert.alert(
-      "Bientôt disponible",
-      "La recherche par mot-clé sera activée en Phase 1.4.",
-    );
-  };
-
-  const handleLocation = () => {
-    Alert.alert(
-      "Bientôt disponible",
-      "La géolocalisation et la sélection manuelle de zone arrivent bientôt.",
-    );
-  };
-
-  const handleSeeAll = () => {
-    Alert.alert(
-      "Bientôt disponible",
-      "La liste complète des métiers arrive en Phase 1.4.",
-    );
-  };
-
-  const handleAccount = () => {
-    Alert.alert(
-      "Mon compte",
-      user?.email ?? "",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Se déconnecter",
-          style: "destructive",
-          onPress: () => signOut(),
-        },
-      ],
-    );
-  };
-
-  const handleEmptyCTA = () => {
-    Alert.alert(
-      "Trouver un artisan",
-      "Choisis une catégorie ci-dessus pour démarrer ta recherche.",
-    );
-  };
+  const tap = (svc: Service) =>
+    Alert.alert(svc.name, "La recherche d'artisans sera disponible prochainement.");
+  const tapSearch = () =>
+    Alert.alert("Recherche", "La recherche sera activée prochainement.");
+  const tapAccount = () =>
+    Alert.alert("Mon compte", user?.email ?? "", [
+      { text: "Fermer", style: "cancel" },
+      { text: "Se déconnecter", style: "destructive", onPress: () => signOut() },
+    ]);
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header — localisation + avatar */}
-      <View style={styles.header}>
+      {/* Header */}
+      <View style={s.header}>
+        <View style={s.headerLeft}>
+          <View style={s.hLogo}>
+            <Ionicons name="construct" size={14} color={brand.white} />
+          </View>
+          <Text style={s.hName}>Najda</Text>
+        </View>
         <Pressable
-          style={({ pressed }) => [
-            styles.locationPill,
-            pressed && styles.pressedSubtle,
-          ]}
-          onPress={handleLocation}
+          style={({ pressed }) => [s.avatar, pressed && s.op]}
+          onPress={tapAccount}
           accessibilityRole="button"
-          accessibilityLabel="Définir ma position"
         >
-          <Ionicons
-            name="location-outline"
-            size={15}
-            color={Colors.brand.gray800}
-          />
-          <Text style={styles.locationText}>Définir ma position</Text>
-          <Ionicons
-            name="chevron-down"
-            size={14}
-            color={Colors.brand.gray600}
-          />
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.avatar,
-            pressed && styles.pressedSubtle,
-          ]}
-          onPress={handleAccount}
-          accessibilityRole="button"
-          accessibilityLabel="Ouvrir mon compte"
-        >
-          <Text style={styles.avatarText}>{initial}</Text>
+          <Text style={s.avatarTxt}>{initial}</Text>
         </Pressable>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
-        {/* Salutation */}
-        <View style={styles.greetingBlock}>
-          <Text style={styles.greetingTitle}>
-            Bonjour{firstName ? ` ${firstName}` : ""} 👋
-          </Text>
-          <Text style={styles.greetingSubtitle}>
-            Quel artisan vous faut-il aujourd&apos;hui ?
-          </Text>
-        </View>
-
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
         {/* Recherche */}
-        <Pressable
-          onPress={handleSearch}
-          style={({ pressed }) => [
-            styles.searchBar,
-            pressed && styles.pressedSubtle,
-          ]}
-          accessibilityRole="search"
-          accessibilityLabel="Rechercher un métier ou un artisan"
-        >
-          <Ionicons name="search" size={20} color={Colors.brand.gray400} />
-          <Text style={styles.searchPlaceholder}>
-            Rechercher un métier ou un artisan
-          </Text>
-        </Pressable>
-
-        {/* Urgences 24/7 */}
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderLeft}>
-            <View style={styles.urgentBadge}>
-              <Ionicons name="flash" size={11} color={Colors.brand.danger500} />
+        <Animated.View entering={FadeInDown.delay(50).duration(400)}>
+          <Pressable
+            onPress={tapSearch}
+            style={({ pressed }) => [s.search, pressed && s.searchP]}
+            accessibilityRole="search"
+          >
+            <View style={s.searchIcon}>
+              <Ionicons name="search" size={18} color={brand.primary500} />
             </View>
-            <Text style={styles.sectionTitle}>Urgences 24/7</Text>
-          </View>
-        </View>
-
-        <View style={styles.urgentGrid}>
-          {URGENT_CATEGORIES.map((cat) => (
-            <Pressable
-              key={cat.id}
-              style={({ pressed }) => [
-                styles.urgentCard,
-                pressed && styles.cardPressed,
-              ]}
-              onPress={() => handleCategory(cat)}
-              accessibilityRole="button"
-              accessibilityLabel={cat.name}
-            >
-              <View style={[styles.urgentIconBox, { backgroundColor: cat.bg }]}>
-                <Ionicons name={cat.icon} size={26} color={cat.iconColor} />
-              </View>
-              <Text style={styles.urgentName}>{cat.name}</Text>
-              {cat.available !== undefined && (
-                <View style={styles.availabilityRow}>
-                  <View style={styles.availabilityDot} />
-                  <Text style={styles.availabilityText}>
-                    {cat.available} dispos
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Tous les métiers */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Tous les métiers</Text>
-          <Pressable onPress={handleSeeAll} hitSlop={8}>
-            <Text style={styles.sectionLink}>Voir tout</Text>
+            <Text style={s.searchTxt}>Quel artisan cherchez-vous ?</Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
-        <View style={styles.allGrid}>
-          {ALL_CATEGORIES.map((cat) => (
-            <Pressable
-              key={cat.id}
-              style={({ pressed }) => [
-                styles.allCard,
-                pressed && styles.cardPressed,
-              ]}
-              onPress={() => handleCategory(cat)}
-              accessibilityRole="button"
-              accessibilityLabel={cat.name}
-            >
-              <View style={[styles.allIconBox, { backgroundColor: cat.bg }]}>
-                <Ionicons name={cat.icon} size={22} color={cat.iconColor} />
-              </View>
-              <Text style={styles.allName}>{cat.name}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* RDV à venir — empty state */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Vos RDV à venir</Text>
-        </View>
-
-        <Pressable
-          onPress={handleEmptyCTA}
-          style={({ pressed }) => [
-            styles.emptyState,
-            pressed && styles.cardPressed,
-          ]}
-          accessibilityRole="button"
-        >
-          <View style={styles.emptyIconBox}>
-            <Ionicons
-              name="calendar-outline"
-              size={26}
-              color={Colors.brand.primary500}
-            />
+        {/* Urgences — grandes cartes gradient */}
+        <Animated.View entering={FadeInDown.delay(150).duration(400)}>
+          <View style={s.secHead}>
+            <View style={s.secHeadL}>
+              <View style={s.redDot} />
+              <Text style={s.secTitle}>Urgences 24/7</Text>
+            </View>
+            <Text style={s.secCap}>Intervention rapide</Text>
           </View>
-          <View style={styles.emptyTextBox}>
-            <Text style={styles.emptyTitle}>Aucun RDV pour l&apos;instant</Text>
-            <Text style={styles.emptySubtitle}>
-              Choisis une catégorie ci-dessus pour démarrer.
+
+          <View style={s.urgGrid}>
+            {urgent.map((svc) => (
+              <Pressable
+                key={svc.id}
+                style={({ pressed }) => [pressed && s.cardP]}
+                onPress={() => tap(svc)}
+                accessibilityRole="button"
+              >
+                <LinearGradient
+                  colors={svc.colors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={s.urgCard}
+                >
+                  <Ionicons name={svc.icon} size={28} color="rgba(255,255,255,0.9)" />
+                  <View style={s.urgTxt}>
+                    <Text style={s.urgName}>{svc.name}</Text>
+                    <Text style={s.urgSub}>{svc.sub}</Text>
+                  </View>
+                  <View style={s.urgBadge}>
+                    <Text style={s.urgBadgeTxt}>24/7</Text>
+                  </View>
+                </LinearGradient>
+              </Pressable>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* Tous les services */}
+        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+          <View style={s.secHead}>
+            <Text style={s.secTitle}>Tous les services</Text>
+          </View>
+
+          <View style={s.grid}>
+            {other.map((svc) => (
+              <Pressable
+                key={svc.id}
+                style={({ pressed }) => [s.gCard, pressed && s.cardP]}
+                onPress={() => tap(svc)}
+                accessibilityRole="button"
+              >
+                <View style={[s.gIcon, { backgroundColor: svc.colors[0] }]}>
+                  <Ionicons name={svc.icon} size={24} color={svc.iconColor} />
+                </View>
+                <Text style={s.gName}>{svc.name}</Text>
+                <Text style={s.gSub}>{svc.sub}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* RDV */}
+        <Animated.View entering={FadeInDown.delay(450).duration(400)}>
+          <View style={s.secHead}>
+            <Text style={s.secTitle}>Prochain rendez-vous</Text>
+          </View>
+          <View style={s.empty}>
+            <View style={s.emptyCircle}>
+              <Ionicons name="calendar-outline" size={26} color={brand.primary400} />
+            </View>
+            <Text style={s.emptyT}>Aucun rendez-vous</Text>
+            <Text style={s.emptyS}>
+              Réservez un artisan et votre prochain{"\n"}rendez-vous apparaîtra ici.
             </Text>
           </View>
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={Colors.brand.gray400}
-          />
-        </Pressable>
+        </Animated.View>
 
-        {/* Footer doré — petite touche de signature de marque */}
-        <View style={styles.signatureBlock}>
-          <View style={styles.signatureDot} />
-          <Text style={styles.signatureText}>
-            Tous les artisans Najda sont vérifiés
-          </Text>
-          <View style={styles.signatureDot} />
+        {/* Signature */}
+        <View style={s.sig}>
+          <View style={s.sigL} />
+          <Ionicons name="shield-checkmark" size={13} color={brand.gold500} />
+          <Text style={s.sigT}>Artisans vérifiés</Text>
+          <View style={s.sigL} />
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.brand.white,
-  },
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: brand.gray50 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.md,
-    gap: 12,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
+    backgroundColor: brand.white,
+    borderBottomWidth: 1,
+    borderBottomColor: brand.gray100,
   },
-  locationPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: Colors.brand.gray50,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.brand.gray200,
-  },
-  locationText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Colors.brand.gray800,
-    letterSpacing: -0.1,
-  },
-  pressedSubtle: {
-    opacity: 0.7,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.brand.primary500,
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  hLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: brand.primary500,
     justifyContent: "center",
     alignItems: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.brand.primary700,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.18,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
   },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.brand.gold500,
-    letterSpacing: -0.5,
+  hName: { ...T.xl, fontWeight: "700", color: brand.gray900, letterSpacing: -0.6 },
+  avatar: {
+    width: comp.avatarSm,
+    height: comp.avatarSm,
+    borderRadius: radius.full,
+    backgroundColor: brand.primary500,
+    justifyContent: "center",
+    alignItems: "center",
   },
+  avatarTxt: { fontSize: 15, fontWeight: "700", color: brand.white },
+  op: { opacity: 0.7 },
 
-  scroll: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
+  scroll: { padding: space.lg, paddingTop: space.md },
 
-  greetingBlock: {
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  greetingTitle: {
-    fontSize: 30,
-    fontWeight: "700",
-    color: Colors.brand.gray900,
-    letterSpacing: -1,
-    marginBottom: 4,
-  },
-  greetingSubtitle: {
-    fontSize: 15,
-    color: Colors.brand.gray600,
-    fontWeight: "400",
-  },
-
-  searchBar: {
+  search: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: Colors.brand.gray50,
-    height: 52,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: Colors.brand.gray200,
-    marginBottom: Spacing.xl,
+    gap: 12,
+    height: 56,
+    backgroundColor: brand.white,
+    borderRadius: radius.xl,
+    paddingHorizontal: space.md,
+    marginBottom: space.xl,
+    ...shadow.md,
   },
-  searchPlaceholder: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.brand.gray400,
-    fontWeight: "400",
+  searchP: { transform: [{ scale: 0.99 }], opacity: 0.9 },
+  searchIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
+    backgroundColor: brand.primary50,
+    justifyContent: "center",
+    alignItems: "center",
   },
+  searchTxt: { ...T.base, color: brand.gray400, flex: 1 },
 
-  sectionHeader: {
+  secHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: space.md,
   },
-  sectionHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  urgentBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    backgroundColor: Colors.brand.danger50,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.brand.danger100,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: Colors.brand.gray900,
-    letterSpacing: -0.4,
-  },
-  sectionLink: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.brand.primary500,
-    letterSpacing: -0.1,
-  },
+  secHeadL: { flexDirection: "row", alignItems: "center", gap: 8 },
+  secTitle: { ...T.lg, fontWeight: "700", color: brand.gray900, letterSpacing: -0.3 },
+  secCap: { ...T.xs, color: brand.gray400, fontWeight: "500" },
+  redDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: brand.danger500 },
 
-  urgentGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: Spacing.xl,
-  },
-  urgentCard: {
-    flexBasis: "48%",
-    flexGrow: 1,
-    backgroundColor: Colors.brand.white,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.brand.gray200,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.brand.gray900,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.04,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
-  },
-  urgentIconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  urgentName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.brand.gray900,
-    letterSpacing: -0.2,
-    marginBottom: 6,
-  },
-  availabilityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  availabilityDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.brand.success500,
-  },
-  availabilityText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Colors.brand.success700,
-  },
-  cardPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.985 }],
-  },
-
-  allGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: Spacing.xl,
-  },
-  allCard: {
-    flexBasis: "31.5%",
-    flexGrow: 1,
-    backgroundColor: Colors.brand.white,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.brand.gray200,
-  },
-  allIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  allName: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.brand.gray900,
-    letterSpacing: -0.1,
-    textAlign: "center",
-  },
-
-  emptyState: {
+  urgGrid: { gap: 10, marginBottom: space.xl },
+  urgCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    backgroundColor: Colors.brand.primary50,
-    borderRadius: 16,
     padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.brand.primary100,
-    marginBottom: Spacing.xl,
+    borderRadius: radius.xl,
+    minHeight: 76,
   },
-  emptyIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: Colors.brand.primary100,
+  urgTxt: { flex: 1 },
+  urgName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: brand.white,
+    letterSpacing: -0.3,
+  },
+  urgSub: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.75)",
+    marginTop: 2,
+  },
+  urgBadge: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  urgBadgeTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: brand.white,
+  },
+  cardP: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: space.xl,
+  },
+  gCard: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    backgroundColor: brand.white,
+    borderRadius: radius.lg,
+    padding: space.md,
+    ...shadow.sm,
+  },
+  gIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: space.md,
   },
-  emptyTextBox: {
-    flex: 1,
-  },
-  emptyTitle: {
-    fontSize: 14,
+  gName: {
+    ...T.base,
     fontWeight: "600",
-    color: Colors.brand.primary700,
+    color: brand.gray900,
     letterSpacing: -0.2,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  emptySubtitle: {
-    fontSize: 12,
-    color: Colors.brand.primary700,
-    opacity: 0.75,
-  },
+  gSub: { ...T.xs, color: brand.gray500 },
 
-  signatureBlock: {
+  empty: {
+    backgroundColor: brand.white,
+    borderRadius: radius.xl,
+    padding: space.xl,
+    alignItems: "center",
+    gap: 10,
+    marginBottom: space.xl,
+    ...shadow.sm,
+  },
+  emptyCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: brand.primary50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  emptyT: { ...T.base, fontWeight: "600", color: brand.gray800 },
+  emptyS: { ...T.sm, color: brand.gray500, textAlign: "center", lineHeight: 20 },
+
+  sig: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 10,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingVertical: space.lg,
   },
-  signatureDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.brand.gold500,
-  },
-  signatureText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Colors.brand.gray400,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
+  sigL: { flex: 1, height: 1, backgroundColor: brand.gray200 },
+  sigT: { ...T.xs, fontWeight: "500", color: brand.gray400 },
 });

@@ -14,25 +14,21 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Colors, Radius, Spacing } from "@/constants/theme";
+import { brand, space, radius, shadow, comp, text as T } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 type Mode = "signin" | "signup";
 
-/**
- * Écran d'authentification par email.
- *
- * Permet à la fois la connexion (signin) et l'inscription (signup) selon
- * le mode actif. Sur inscription, Supabase envoie un email de confirmation
- * que l'utilisateur doit valider avant de pouvoir se connecter.
- */
 export default function EmailAuthScreen() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState<"email" | "password" | null>(null);
   const passwordRef = useRef<TextInput>(null);
 
   const isSignUp = mode === "signup";
@@ -44,10 +40,10 @@ export default function EmailAuthScreen() {
 
   const validate = (): string | null => {
     const trimmed = email.trim();
-    if (!trimmed) return "Saisis ton adresse email.";
+    if (!trimmed) return "Veuillez saisir votre adresse email.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed))
       return "Cette adresse email ne semble pas valide.";
-    if (!password) return "Saisis un mot de passe.";
+    if (!password) return "Veuillez saisir un mot de passe.";
     if (isSignUp && password.length < 8)
       return "Le mot de passe doit contenir au moins 8 caractères.";
     return null;
@@ -59,34 +55,26 @@ export default function EmailAuthScreen() {
       setError(validationError);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
       if (isSignUp) {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { error: e } = await supabase.auth.signUp({
           email: email.trim(),
           password,
         });
-        if (signUpError) {
-          throw signUpError;
-        }
+        if (e) throw e;
         Alert.alert(
-          "Vérifie ta boîte mail",
-          `Un email de confirmation a été envoyé à ${email.trim()}. Clique sur le lien pour activer ton compte, puis reviens te connecter.`,
-          [{ text: "OK", onPress: () => setMode("signin") }],
+          "Vérifiez votre boîte mail",
+          `Un email de confirmation a été envoyé à ${email.trim()}. Cliquez sur le lien pour activer votre compte.`,
+          [{ text: "Compris", onPress: () => setMode("signin") }],
         );
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { error: e } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
-        if (signInError) {
-          throw signInError;
-        }
-        // La redirection se fera automatiquement via le layout (auth)
-        // dès que la session sera détectée.
+        if (e) throw e;
       }
     } catch (err: unknown) {
       const message =
@@ -99,154 +87,223 @@ export default function EmailAuthScreen() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    const trimmed = email.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      Alert.alert(
+        "Email requis",
+        "Saisissez d'abord votre adresse email dans le champ ci-dessus, puis appuyez à nouveau sur \"Mot de passe oublié\".",
+      );
+      return;
+    }
+    try {
+      const { error: e } = await supabase.auth.resetPasswordForEmail(trimmed);
+      if (e) throw e;
+      Alert.alert(
+        "Email envoyé",
+        `Si un compte existe pour ${trimmed}, vous recevrez un lien pour réinitialiser votre mot de passe.`,
+      );
+    } catch {
+      Alert.alert(
+        "Erreur",
+        "Impossible d'envoyer l'email de réinitialisation. Réessayez.",
+      );
+    }
+  };
+
+  const emailBorder =
+    focused === "email"
+      ? brand.primary400
+      : error && !email.trim()
+        ? brand.danger500
+        : brand.gray200;
+
+  const passwordBorder =
+    focused === "password"
+      ? brand.primary400
+      : error && !password
+        ? brand.danger500
+        : brand.gray200;
+
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView style={s.container} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.flex}
+        style={s.flex}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={s.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header avec bouton retour */}
-          <View style={styles.header}>
+          {/* Header */}
+          <View style={s.header}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Retour"
-              hitSlop={12}
+              hitSlop={16}
               onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed && styles.pressedSubtle,
-              ]}
+              style={({ pressed }) => [s.backBtn, pressed && s.pressed]}
             >
-              <Ionicons
-                name="chevron-back"
-                size={26}
-                color={Colors.brand.gray900}
-              />
+              <Ionicons name="arrow-back" size={22} color={brand.gray800} />
             </Pressable>
           </View>
 
           {/* Titre */}
-          <View style={styles.titleBlock}>
-            <Text style={styles.title}>
-              {isSignUp ? "Créer un compte" : "Bon retour"}
-            </Text>
-            <Text style={styles.subtitle}>
-              {isSignUp
-                ? "Quelques secondes suffisent pour rejoindre Najda."
-                : "Connecte-toi pour retrouver tes artisans et tes RDV."}
-            </Text>
-          </View>
+          <Text style={s.title}>
+            {isSignUp ? "Créer votre compte" : "Content de vous revoir"}
+          </Text>
+          <Text style={s.subtitle}>
+            {isSignUp
+              ? "Rejoignez Najda pour accéder à des artisans vérifiés."
+              : "Connectez-vous pour retrouver vos artisans et rendez-vous."}
+          </Text>
 
           {/* Champs */}
-          <View style={styles.fields}>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Email</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons
-                  name="mail-outline"
-                  size={20}
-                  color={Colors.brand.gray400}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="prenom@email.com"
-                  placeholderTextColor={Colors.brand.gray400}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  returnKeyType="next"
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  style={styles.input}
-                  editable={!loading}
-                />
-              </View>
+          <View style={s.fields}>
+            <View style={s.fieldGroup}>
+              <Text style={s.label}>Adresse email</Text>
+              <TextInput
+                value={email}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  if (error) setError(null);
+                }}
+                onFocus={() => setFocused("email")}
+                onBlur={() => setFocused(null)}
+                placeholder="vous@exemple.com"
+                placeholderTextColor={brand.gray400}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                style={[s.input, { borderColor: emailBorder }]}
+                editable={!loading}
+              />
             </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Mot de passe</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={20}
-                  color={Colors.brand.gray400}
-                  style={styles.inputIcon}
-                />
+            <View style={s.fieldGroup}>
+              <Text style={s.label}>Mot de passe</Text>
+              <View style={[s.inputRow, { borderColor: passwordBorder }]}>
                 <TextInput
                   ref={passwordRef}
                   value={password}
-                  onChangeText={setPassword}
-                  placeholder={isSignUp ? "8 caractères minimum" : "Ton mot de passe"}
-                  placeholderTextColor={Colors.brand.gray400}
-                  secureTextEntry
+                  onChangeText={(t) => {
+                    setPassword(t);
+                    if (error) setError(null);
+                  }}
+                  onFocus={() => setFocused("password")}
+                  onBlur={() => setFocused(null)}
+                  placeholder={
+                    isSignUp ? "Minimum 8 caractères" : "Votre mot de passe"
+                  }
+                  placeholderTextColor={brand.gray400}
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                  autoComplete={
+                    isSignUp ? "new-password" : "current-password"
+                  }
                   textContentType={isSignUp ? "newPassword" : "password"}
                   returnKeyType="done"
                   onSubmitEditing={handleSubmit}
-                  style={styles.input}
+                  style={s.inputInner}
                   editable={!loading}
                 />
+                <Pressable
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={10}
+                  style={s.eyeBtn}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color={brand.gray400}
+                  />
+                </Pressable>
               </View>
             </View>
 
+            {/* Remember me + Forgot password */}
+            <View style={s.optionsRow}>
+              <Pressable
+                onPress={() => setRememberMe(!rememberMe)}
+                style={s.checkboxRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+              >
+                <View
+                  style={[
+                    s.checkbox,
+                    rememberMe && s.checkboxChecked,
+                  ]}
+                >
+                  {rememberMe && (
+                    <Ionicons name="checkmark" size={14} color={brand.white} />
+                  )}
+                </View>
+                <Text style={s.checkboxLabel}>Se souvenir de moi</Text>
+              </Pressable>
+
+              {!isSignUp && (
+                <Pressable
+                  onPress={handleForgotPassword}
+                  hitSlop={8}
+                  style={({ pressed }) => pressed && s.pressed}
+                >
+                  <Text style={s.forgotLink}>Mot de passe oublié ?</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {/* Erreur */}
             {error && (
-              <View style={styles.errorBox}>
+              <View style={s.errorBox}>
                 <Ionicons
                   name="alert-circle"
-                  size={18}
-                  color={Colors.brand.danger500}
+                  size={16}
+                  color={brand.danger600}
                 />
-                <Text style={styles.errorText}>{error}</Text>
+                <Text style={s.errorText}>{error}</Text>
               </View>
             )}
           </View>
 
-          {/* Bouton principal */}
+          {/* Submit */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={isSignUp ? "Créer mon compte" : "Se connecter"}
             style={({ pressed }) => [
-              styles.submitButton,
-              loading && styles.submitButtonDisabled,
-              pressed && !loading && styles.buttonPressed,
+              s.submitBtn,
+              loading && s.submitBtnDisabled,
+              pressed && !loading && s.btnPressed,
             ]}
             onPress={handleSubmit}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color={Colors.brand.white} />
+              <ActivityIndicator color={brand.white} />
             ) : (
-              <Text style={styles.submitButtonText}>
+              <Text style={s.submitBtnText}>
                 {isSignUp ? "Créer mon compte" : "Se connecter"}
               </Text>
             )}
           </Pressable>
 
-          {/* Toggle mode */}
+          {/* Toggle */}
           <Pressable
             onPress={toggleMode}
             disabled={loading}
-            style={({ pressed }) => [
-              styles.toggleRow,
-              pressed && styles.pressedSubtle,
-            ]}
+            style={({ pressed }) => [s.toggle, pressed && s.pressed]}
             accessibilityRole="button"
           >
-            <Text style={styles.toggleText}>
+            <Text style={s.toggleText}>
               {isSignUp
-                ? "Tu as déjà un compte ?  "
+                ? "Vous avez déjà un compte ?  "
                 : "Pas encore de compte ?  "}
-              <Text style={styles.toggleLink}>
+              <Text style={s.toggleLink}>
                 {isSignUp ? "Se connecter" : "S'inscrire"}
               </Text>
             </Text>
@@ -257,166 +314,149 @@ export default function EmailAuthScreen() {
   );
 }
 
-/**
- * Traduit les messages d'erreur Supabase en français lisible.
- */
 function translateError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("invalid login credentials"))
+  const l = message.toLowerCase();
+  if (l.includes("invalid login credentials"))
     return "Email ou mot de passe incorrect.";
-  if (lower.includes("user already registered"))
-    return "Un compte existe déjà avec cet email. Essaie de te connecter.";
-  if (lower.includes("email not confirmed"))
-    return "Tu dois d'abord confirmer ton email. Vérifie ta boîte mail.";
-  if (lower.includes("password should be at least"))
+  if (l.includes("user already registered"))
+    return "Un compte existe déjà avec cet email.";
+  if (l.includes("email not confirmed"))
+    return "Veuillez d'abord confirmer votre email.";
+  if (l.includes("password should be at least"))
     return "Le mot de passe doit contenir au moins 8 caractères.";
-  if (lower.includes("rate limit"))
-    return "Trop de tentatives. Réessaie dans quelques minutes.";
-  if (lower.includes("network"))
-    return "Connexion internet instable. Vérifie ton réseau.";
+  if (l.includes("rate limit"))
+    return "Trop de tentatives. Réessayez dans quelques minutes.";
+  if (l.includes("network"))
+    return "Connexion instable. Vérifiez votre réseau.";
   return message;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.brand.white,
-  },
-  flex: {
-    flex: 1,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: brand.white },
+  flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.xl,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.lg,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.full,
+  header: { paddingTop: space.sm, paddingBottom: space.xl },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: brand.gray50,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: -10,
+    marginLeft: -4,
   },
-  pressedSubtle: {
-    opacity: 0.6,
-  },
-  titleBlock: {
-    marginBottom: Spacing.xl,
-  },
+  pressed: { opacity: 0.6 },
   title: {
-    fontSize: 32,
+    ...T["3xl"],
     fontWeight: "700",
-    color: Colors.brand.gray900,
+    color: brand.gray900,
     letterSpacing: -0.8,
-    marginBottom: 8,
+    marginBottom: space.sm,
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: Colors.brand.gray600,
-    fontWeight: "400",
+    ...T.base,
+    color: brand.gray500,
+    marginBottom: space.xl,
+    maxWidth: 320,
   },
-  fields: {
-    gap: Spacing.md,
-    marginBottom: Spacing.xl,
+  fields: { gap: space.md, marginBottom: space.xl },
+  fieldGroup: { gap: 8 },
+  label: { ...T.sm, fontWeight: "600", color: brand.gray700 },
+  input: {
+    height: comp.inputHeight,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    backgroundColor: brand.white,
+    paddingHorizontal: 16,
+    ...T.base,
+    color: brand.gray900,
   },
-  fieldGroup: {
-    gap: 8,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.brand.gray800,
-    letterSpacing: -0.1,
-  },
-  inputWrapper: {
+  inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.brand.gray50,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.brand.gray200,
-    paddingHorizontal: 14,
-    height: 54,
+    height: comp.inputHeight,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    backgroundColor: brand.white,
+    paddingHorizontal: 16,
   },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
+  inputInner: {
     flex: 1,
-    fontSize: 16,
-    color: Colors.brand.gray900,
+    ...T.base,
+    color: brand.gray900,
     paddingVertical: 0,
-    fontWeight: "400",
+  },
+  eyeBtn: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  optionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: brand.gray300,
+    backgroundColor: brand.white,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: brand.primary500,
+    borderColor: brand.primary500,
+  },
+  checkboxLabel: {
+    ...T.sm,
+    color: brand.gray700,
+    fontWeight: "500",
+  },
+  forgotLink: {
+    ...T.sm,
+    color: brand.primary500,
+    fontWeight: "600",
   },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.brand.danger50,
-    borderRadius: 12,
+    backgroundColor: brand.danger50,
+    borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: Colors.brand.danger100,
   },
   errorText: {
     flex: 1,
-    fontSize: 13,
-    color: Colors.brand.danger700,
+    ...T.sm,
+    color: brand.danger700,
     fontWeight: "500",
-    lineHeight: 18,
   },
-  submitButton: {
-    height: 54,
-    borderRadius: 14,
-    backgroundColor: Colors.brand.primary500,
+  submitBtn: {
+    height: comp.buttonHeight,
+    borderRadius: radius.md,
+    backgroundColor: brand.primary500,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: Spacing.md,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.brand.primary700,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    marginBottom: space.md,
+    ...shadow.lg,
   },
-  submitButtonDisabled: {
-    opacity: 0.7,
-  },
-  buttonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.985 }],
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.brand.white,
-    letterSpacing: -0.2,
-  },
-  toggleRow: {
-    alignItems: "center",
-    paddingVertical: Spacing.sm,
-  },
-  toggleText: {
-    fontSize: 14,
-    color: Colors.brand.gray600,
-    fontWeight: "400",
-  },
-  toggleLink: {
-    color: Colors.brand.primary500,
-    fontWeight: "600",
-  },
+  submitBtnDisabled: { opacity: 0.65 },
+  btnPressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
+  submitBtnText: { ...T.base, fontWeight: "600", color: brand.white },
+  toggle: { alignItems: "center", paddingVertical: space.sm },
+  toggleText: { ...T.sm, color: brand.gray500 },
+  toggleLink: { color: brand.primary500, fontWeight: "600" },
 });

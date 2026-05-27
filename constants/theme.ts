@@ -1,132 +1,205 @@
-import { Platform } from "react-native";
+import { Platform, ViewStyle } from "react-native";
 
 /**
- * Palette de couleurs Najda
+ * Design system Najda.
  *
- * Identité visuelle : violet profond (confiance, modernité) + or (premium,
- * service haut de gamme) + neutres riches. Le contraste violet/or est la
- * signature de la marque, à réserver aux éléments forts (logo, badges
- * premium, accents).
+ * Palette violet (#2B2891) + or (#ECD287) + neutres purs.
+ * Philosophie : "confiance silencieuse" — calme, maîtrisé, premium.
+ * Le violet est réservé aux actions (CTA, logo, avatar).
+ * L'or est réservé aux badges premium et accents de marque.
+ * Les neutres purs (non teintés) assurent la lisibilité.
  */
-const brandColors = {
-  // Violet Najda — couleur principale de la marque
-  primary50: "#F4F3FE",
-  primary100: "#E0DDFB",
-  primary200: "#C0BCF6",
-  primary300: "#918AED", // Fourni — violet clair
-  primary400: "#7063CE", // Fourni — violet moyen
-  primary500: "#2B2891", // Fourni — violet profond, signature
-  primary700: "#1A1761",
-  primary900: "#060530", // Fourni — quasi-noir teinté violet
 
-  // Or Najda — accent premium (badges, CTA spéciaux, finitions)
-  gold50: "#FBF5E1",
-  gold100: "#F6E8B8",
-  gold200: "#F1DC9C",
-  gold500: "#ECD287", // Fourni — or signature
+const palette = {
+  violet300: "#918AED",
+  violet400: "#7063CE",
+  violet500: "#2B2891",
+  violet900: "#060530",
+  gold500: "#ECD287",
+  white: "#FFFFFF",
+};
+
+export const brand = {
+  // Violet Najda
+  primary50: "#F5F4FE",
+  primary100: "#ECEAFD",
+  primary200: "#D5D2FA",
+  primary300: palette.violet300,
+  primary400: palette.violet400,
+  primary500: palette.violet500,
+  primary600: "#221F75",
+  primary700: "#1A1761",
+  primary800: "#110F47",
+  primary900: palette.violet900,
+
+  // Or Najda
+  gold50: "#FDF9EE",
+  gold100: "#F9F0D6",
+  gold200: "#F3E3B3",
+  gold500: palette.gold500,
   gold700: "#A88F3E",
   gold900: "#5F4D17",
 
-  // Rouge urgence — mode dépannage 24/7
-  danger50: "#FDF2F1",
-  danger100: "#FBE1DE",
-  danger200: "#F4B5AE",
-  danger500: "#D84A3A",
-  danger700: "#7E2A22",
+  // Semantic — rouge
+  danger50: "#FEF2F2",
+  danger100: "#FEE2E2",
+  danger500: "#EF4444",
+  danger600: "#DC2626",
+  danger700: "#B91C1C",
 
-  // Vert succès — disponibilité, validation
-  success50: "#E1F5EE",
-  success500: "#1D9E75",
-  success700: "#0F6E56",
+  // Semantic — vert
+  success50: "#F0FDF4",
+  success100: "#DCFCE7",
+  success500: "#22C55E",
+  success700: "#15803D",
 
-  // Orange avertissement — créneaux limités
-  warning50: "#FAEEDA",
-  warning500: "#EF9F27",
-  warning700: "#854F0B",
+  // Semantic — orange
+  warning50: "#FFFBEB",
+  warning500: "#F59E0B",
+  warning700: "#B45309",
 
-  // Neutres — basés sur le quasi-noir Najda pour une cohérence chromatique
+  // Neutres purs (non teintés violet) pour une lisibilité maximale
   white: "#FFFFFF",
   black: "#000000",
-  gray50: "#F7F8FA",
-  gray100: "#EEF0F3",
-  gray200: "#D8DCE2",
-  gray300: "#C0C5CC",
+  gray50: "#F9FAFB",
+  gray100: "#F3F4F6",
+  gray200: "#E5E7EB",
+  gray300: "#D1D5DB",
   gray400: "#9CA3AF",
-  gray600: "#6B7280",
-  gray800: "#2E2E3E",
-  gray900: "#060530", // Reprise du primary900 pour unifier
-};
-
-const tintColorLight = brandColors.primary500;
-const tintColorDark = brandColors.gold500;
-
-export const Colors = {
-  // Couleurs de marque accessibles partout via Colors.brand.xxx
-  brand: brandColors,
-
-  // Thème clair (par défaut)
-  light: {
-    text: brandColors.gray900,
-    textSecondary: brandColors.gray600,
-    background: brandColors.white,
-    backgroundSecondary: brandColors.gray50,
-    tint: tintColorLight,
-    icon: brandColors.gray600,
-    tabIconDefault: brandColors.gray400,
-    tabIconSelected: tintColorLight,
-    border: brandColors.gray200,
-    primary: brandColors.primary500,
-    accent: brandColors.gold500,
-    danger: brandColors.danger500,
-    success: brandColors.success500,
-    warning: brandColors.warning500,
-  },
-
-  // Thème sombre
-  dark: {
-    text: "#F4F3FE",
-    textSecondary: "#A8A4D4",
-    background: brandColors.primary900,
-    backgroundSecondary: "#0E0C42",
-    tint: tintColorDark,
-    icon: "#A8A4D4",
-    tabIconDefault: "#7063CE",
-    tabIconSelected: tintColorDark,
-    border: "#1A1761",
-    primary: brandColors.primary300,
-    accent: brandColors.gold500,
-    danger: "#F09595",
-    success: "#5DCAA5",
-    warning: "#FAC775",
-  },
+  gray500: "#6B7280",
+  gray600: "#4B5563",
+  gray700: "#374151",
+  gray800: "#1F2937",
+  gray900: "#111827",
 };
 
 /**
- * Espacement standard
+ * Espacement — échelle harmonique basée sur 4px.
  */
-export const Spacing = {
+export const space = {
   xs: 4,
   sm: 8,
   md: 16,
   lg: 24,
   xl: 32,
-  xxl: 48,
+  "2xl": 40,
+  "3xl": 56,
+  "4xl": 72,
 };
 
 /**
- * Rayons de courbure
+ * Rayons de courbure.
  */
-export const Radius = {
+export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
-  xl: 24,
+  xl: 20,
+  "2xl": 24,
   full: 9999,
 };
 
 /**
- * Tailles de police
+ * Typographie — tailles strictes.
+ * 3 niveaux max par écran : display/title, body, caption.
  */
+export const text = {
+  xs: { fontSize: 11, lineHeight: 16 },
+  sm: { fontSize: 13, lineHeight: 18 },
+  base: { fontSize: 15, lineHeight: 22 },
+  lg: { fontSize: 17, lineHeight: 24 },
+  xl: { fontSize: 20, lineHeight: 28 },
+  "2xl": { fontSize: 24, lineHeight: 32 },
+  "3xl": { fontSize: 30, lineHeight: 36 },
+  "4xl": { fontSize: 36, lineHeight: 42 },
+};
+
+/**
+ * Ombres — 3 niveaux normalisés.
+ */
+export const shadow: Record<string, ViewStyle> = Platform.select({
+  ios: {
+    sm: {
+      shadowColor: brand.black,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.04,
+      shadowRadius: 3,
+    },
+    md: {
+      shadowColor: brand.black,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+    },
+    lg: {
+      shadowColor: brand.primary500,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 20,
+    },
+  },
+  default: {
+    sm: { elevation: 1 },
+    md: { elevation: 3 },
+    lg: { elevation: 6 },
+  },
+}) as Record<string, ViewStyle>;
+
+/**
+ * Composants — dimensions et styles réutilisables.
+ */
+export const comp = {
+  buttonHeight: 56,
+  inputHeight: 52,
+  avatarSm: 40,
+  avatarMd: 48,
+  iconBoxSm: 40,
+  iconBoxMd: 48,
+  iconBoxLg: 56,
+};
+
+/**
+ * Thème clair et sombre (pour compatibilité existante).
+ */
+export const Colors = {
+  brand,
+  light: {
+    text: brand.gray900,
+    textSecondary: brand.gray500,
+    background: brand.white,
+    backgroundSecondary: brand.gray50,
+    tint: brand.primary500,
+    icon: brand.gray500,
+    tabIconDefault: brand.gray400,
+    tabIconSelected: brand.primary500,
+    border: brand.gray200,
+    primary: brand.primary500,
+    accent: brand.gold500,
+    danger: brand.danger500,
+    success: brand.success500,
+    warning: brand.warning500,
+  },
+  dark: {
+    text: "#F5F4FE",
+    textSecondary: "#A8A4D4",
+    background: brand.primary900,
+    backgroundSecondary: "#0E0C42",
+    tint: brand.gold500,
+    icon: "#A8A4D4",
+    tabIconDefault: "#7063CE",
+    tabIconSelected: brand.gold500,
+    border: "#1A1761",
+    primary: brand.primary300,
+    accent: brand.gold500,
+    danger: "#FCA5A5",
+    success: "#86EFAC",
+    warning: "#FCD34D",
+  },
+};
+
+// Re-exports legacy pour ne pas casser les imports existants
+export const Spacing = space;
+export const Radius = radius;
 export const FontSize = {
   xs: 11,
   sm: 13,
@@ -139,23 +212,15 @@ export const FontSize = {
 
 export const Fonts = Platform.select({
   ios: {
-    sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    serif: 'ui-serif, Georgia, "Times New Roman", serif',
-    rounded:
-      'ui-rounded, "SF Pro Rounded", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    mono: 'ui-monospace, "Menlo", monospace',
+    sans: "System",
+    serif: "Georgia",
+    rounded: "System",
+    mono: "Menlo",
   },
   default: {
     sans: "normal",
     serif: "serif",
     rounded: "normal",
     mono: "monospace",
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded:
-      "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });

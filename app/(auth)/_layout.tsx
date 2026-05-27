@@ -1,20 +1,15 @@
 import { Redirect, Stack } from "expo-router";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
-import { Colors } from "@/constants/theme";
+import { brand } from "@/constants/theme";
 
-/**
- * Layout du groupe (auth) — écrans accessibles UNIQUEMENT aux utilisateurs
- * non connectés. Si une session est détectée, on redirige automatiquement
- * vers le groupe (app).
- */
 export default function AuthLayout() {
   const { session, isLoading } = useAuth();
 
   if (isLoading) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color={Colors.brand.primary500} />
+      <View style={s.loader}>
+        <ActivityIndicator size="large" color={brand.primary300} />
       </View>
     );
   }
@@ -27,16 +22,25 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: Colors.brand.white },
+        animation: "fade",
+        contentStyle: { backgroundColor: brand.white },
       }}
-    />
+      initialRouteName="splash"
+    >
+      <Stack.Screen
+        name="splash"
+        options={{ contentStyle: { backgroundColor: brand.primary900 } }}
+      />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="email" />
+    </Stack>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   loader: {
     flex: 1,
-    backgroundColor: Colors.brand.white,
+    backgroundColor: brand.primary900,
     justifyContent: "center",
     alignItems: "center",
   },
