@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -11,31 +12,73 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { brand, space, radius, shadow, text as T, comp } from "@/constants/theme";
+import { brand, space, radius, shadow, text as T } from "@/constants/theme";
 import {
-  ARTISANS,
+  getArtisan,
+  getArtisanReviews,
   availabilityLabel,
   availabilityColor,
-} from "@/constants/mockData";
+  type Artisan,
+  type Review,
+} from "@/lib/api";
 
 export default function ArtisanDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const artisan = useMemo(
-    () => ARTISANS.find((a) => a.id === id),
-    [id],
-  );
+  const [artisan, setArtisan] = useState<Artisan | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!artisan) {
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([getArtisan(id), getArtisanReviews(id)])
+      .then(([a, r]) => {
+        if (!mounted) return;
+        setArtisan(a);
+        setReviews(r);
+      })
+      .catch((err) => {
+        if (mounted) setError(err.message ?? "Erreur de chargement");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
+  if (loading) {
     return (
       <SafeAreaView style={s.safe}>
-        <Text style={s.notFound}>Artisan introuvable.</Text>
-        <Pressable onPress={() => router.back()}>
-          <Text style={s.backLink}>Retour</Text>
-        </Pressable>
+        <View style={s.loader}>
+          <ActivityIndicator size="large" color={brand.primary500} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !artisan) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.loader}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={32}
+            color={brand.danger500}
+          />
+          <Text style={s.errorTxt}>{error ?? "Artisan introuvable."}</Text>
+          <Pressable onPress={() => router.back()} style={s.errorBtn}>
+            <Text style={s.errorBtnTxt}>Retour</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -47,16 +90,10 @@ export default function ArtisanDetailScreen() {
     });
   };
 
-  const handleCall = () => {
+  const handleCall = () =>
     Alert.alert("Appel", "La fonction appel sera disponible prochainement.");
-  };
-
-  const handleMessage = () => {
-    Alert.alert(
-      "Message",
-      "La messagerie sera disponible prochainement.",
-    );
-  };
+  const handleMessage = () =>
+    Alert.alert("Message", "La messagerie sera disponible prochainement.");
 
   const stats = [
     { label: "Avis", value: String(artisan.reviewCount), icon: "star" as const },
@@ -68,7 +105,6 @@ export default function ArtisanDetailScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={s.header}>
         <Pressable
           style={({ pressed }) => [s.hBtn, pressed && s.op]}
@@ -94,12 +130,10 @@ export default function ArtisanDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
       >
-        {/* Hero */}
         <Animated.View entering={FadeInDown.delay(50).duration(400)} style={s.hero}>
           <View style={s.avatarLg}>
             <Text style={s.avatarLgTxt}>{artisan.initials}</Text>
           </View>
-
           <View style={s.heroInfo}>
             <View style={s.heroNameRow}>
               <Text style={s.heroName}>
@@ -113,14 +147,12 @@ export default function ArtisanDetailScreen() {
                 />
               )}
             </View>
-
             <View style={s.heroMeta}>
               <Ionicons name="star" size={14} color="#F59E0B" />
               <Text style={s.heroRating}>{artisan.rating}</Text>
               <Text style={s.heroDot}>·</Text>
               <Text style={s.heroSub}>{artisan.reviewCount} avis</Text>
             </View>
-
             <View style={s.availRow}>
               <View
                 style={[
@@ -135,7 +167,6 @@ export default function ArtisanDetailScreen() {
           </View>
         </Animated.View>
 
-        {/* Badges */}
         <Animated.View entering={FadeInDown.delay(120).duration(400)} style={s.badges}>
           {artisan.verified && (
             <View style={s.badge}>
@@ -155,7 +186,6 @@ export default function ArtisanDetailScreen() {
           </View>
         </Animated.View>
 
-        {/* Stats */}
         <Animated.View entering={FadeInDown.delay(180).duration(400)} style={s.statsRow}>
           {stats.map((st) => (
             <View key={st.label} style={s.statCard}>
@@ -166,7 +196,6 @@ export default function ArtisanDetailScreen() {
           ))}
         </Animated.View>
 
-        {/* Actions rapides */}
         <Animated.View entering={FadeInDown.delay(240).duration(400)} style={s.quickActions}>
           <Pressable
             style={({ pressed }) => [s.qaBtn, pressed && s.op]}
@@ -188,9 +217,7 @@ export default function ArtisanDetailScreen() {
           </Pressable>
           <Pressable
             style={({ pressed }) => [s.qaBtn, pressed && s.op]}
-            onPress={() =>
-              Alert.alert("Favori", "Ajouté à vos favoris.")
-            }
+            onPress={() => Alert.alert("Favori", "Ajouté à vos favoris.")}
           >
             <View style={s.qaIcon}>
               <Ionicons name="heart-outline" size={20} color={brand.primary500} />
@@ -199,7 +226,6 @@ export default function ArtisanDetailScreen() {
           </Pressable>
         </Animated.View>
 
-        {/* Bio */}
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <Text style={s.secTitle}>À propos</Text>
           <View style={s.bioCard}>
@@ -207,7 +233,6 @@ export default function ArtisanDetailScreen() {
           </View>
         </Animated.View>
 
-        {/* Services */}
         <Animated.View entering={FadeInDown.delay(360).duration(400)}>
           <Text style={s.secTitle}>Services proposés</Text>
           <View style={s.servicesWrap}>
@@ -219,32 +244,36 @@ export default function ArtisanDetailScreen() {
           </View>
         </Animated.View>
 
-        {/* Avis */}
         <Animated.View entering={FadeInDown.delay(420).duration(400)}>
           <View style={s.secHeadRow}>
             <Text style={s.secTitle}>Avis clients</Text>
             <Text style={s.secCount}>{artisan.reviewCount} avis</Text>
           </View>
-          {artisan.reviews.map((rev) => (
-            <View key={rev.id} style={s.reviewCard}>
-              <View style={s.reviewTop}>
-                <Text style={s.reviewAuthor}>{rev.author}</Text>
-                <View style={s.reviewStars}>
-                  {Array.from({ length: rev.rating }).map((_, i) => (
-                    <Ionicons key={i} name="star" size={12} color="#F59E0B" />
-                  ))}
-                </View>
-              </View>
-              <Text style={s.reviewTxt}>{rev.text}</Text>
-              <Text style={s.reviewDate}>{rev.date}</Text>
+          {reviews.length === 0 ? (
+            <View style={s.noReviews}>
+              <Text style={s.noReviewsTxt}>Aucun avis pour l&apos;instant.</Text>
             </View>
-          ))}
+          ) : (
+            reviews.map((rev) => (
+              <View key={rev.id} style={s.reviewCard}>
+                <View style={s.reviewTop}>
+                  <Text style={s.reviewAuthor}>{rev.author}</Text>
+                  <View style={s.reviewStars}>
+                    {Array.from({ length: rev.rating }).map((_, i) => (
+                      <Ionicons key={i} name="star" size={12} color="#F59E0B" />
+                    ))}
+                  </View>
+                </View>
+                <Text style={s.reviewTxt}>{rev.text}</Text>
+                <Text style={s.reviewDate}>{rev.date}</Text>
+              </View>
+            ))
+          )}
         </Animated.View>
 
         <View style={s.spacer} />
       </ScrollView>
 
-      {/* CTA fixe en bas */}
       <View style={s.ctaBar}>
         <View style={s.ctaInfo}>
           <Text style={s.ctaPrice}>{artisan.priceRange}</Text>
@@ -265,19 +294,26 @@ export default function ArtisanDetailScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: brand.white },
-  notFound: {
-    ...T.base,
-    color: brand.gray500,
-    textAlign: "center",
-    marginTop: 100,
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.xl,
   },
-  backLink: {
+  errorTxt: {
     ...T.base,
-    color: brand.primary500,
+    color: brand.gray700,
     textAlign: "center",
+  },
+  errorBtn: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    backgroundColor: brand.primary500,
+    borderRadius: radius.md,
     marginTop: space.md,
-    fontWeight: "600",
   },
+  errorBtnTxt: { ...T.base, fontWeight: "600", color: brand.white },
 
   header: {
     flexDirection: "row",
@@ -301,11 +337,7 @@ const s = StyleSheet.create({
 
   scroll: { paddingHorizontal: space.lg, paddingTop: space.lg },
 
-  hero: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: space.lg,
-  },
+  hero: { flexDirection: "row", gap: 16, marginBottom: space.lg },
   avatarLg: {
     width: 72,
     height: 72,
@@ -349,11 +381,7 @@ const s = StyleSheet.create({
   },
   badgeTxt: { ...T.xs, fontWeight: "600", color: brand.primary600 },
 
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: space.xl,
-  },
+  statsRow: { flexDirection: "row", gap: 10, marginBottom: space.xl },
   statCard: {
     flex: 1,
     backgroundColor: brand.gray50,
@@ -365,11 +393,7 @@ const s = StyleSheet.create({
   statVal: { ...T.lg, fontWeight: "700", color: brand.gray900 },
   statLabel: { ...T.xs, color: brand.gray500, fontWeight: "500" },
 
-  quickActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: space.xl,
-  },
+  quickActions: { flexDirection: "row", gap: 12, marginBottom: space.xl },
   qaBtn: { flex: 1, alignItems: "center", gap: 8 },
   qaIcon: {
     width: 48,
@@ -419,6 +443,12 @@ const s = StyleSheet.create({
     borderRadius: radius.full,
   },
   svcTxt: { ...T.sm, fontWeight: "500", color: brand.gray700 },
+
+  noReviews: {
+    padding: space.md,
+    alignItems: "center",
+  },
+  noReviewsTxt: { ...T.sm, color: brand.gray500 },
 
   reviewCard: {
     backgroundColor: brand.gray50,

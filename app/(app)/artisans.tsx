@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   StatusBar,
@@ -11,13 +12,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { brand, space, radius, shadow, text as T, comp } from "@/constants/theme";
+import { brand, space, radius, shadow, text as T } from "@/constants/theme";
 import {
-  ARTISANS,
+  getArtisansByCategory,
   availabilityLabel,
   availabilityColor,
   type Artisan,
-} from "@/constants/mockData";
+} from "@/lib/api";
 
 type Filter = "all" | "now" | "rating" | "closest";
 
@@ -35,10 +36,33 @@ export default function ArtisansScreen() {
     categoryName: string;
   }>();
   const [filter, setFilter] = useState<Filter>("all");
+  const [artisans, setArtisans] = useState<Artisan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const artisans = useMemo(() => {
-    let list = ARTISANS.filter((a) => a.categoryId === category);
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(null);
 
+    getArtisansByCategory(category)
+      .then((list) => {
+        if (mounted) setArtisans(list);
+      })
+      .catch((err) => {
+        if (mounted) setError(err.message ?? "Erreur de chargement");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [category]);
+
+  const filtered = useMemo(() => {
+    let list = [...artisans];
     switch (filter) {
       case "now":
         list = list.filter(
@@ -46,18 +70,17 @@ export default function ArtisansScreen() {
         );
         break;
       case "rating":
-        list = [...list].sort((a, b) => b.rating - a.rating);
+        list.sort((a, b) => b.rating - a.rating);
         break;
       case "closest":
-        list = [...list].sort((a, b) => a.distance - b.distance);
+        list.sort((a, b) => a.distance - b.distance);
         break;
     }
-
     return list;
-  }, [category, filter]);
+  }, [artisans, filter]);
 
   const renderArtisan = ({ item, index }: { item: Artisan; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 80).duration(400)}>
+    <Animated.View entering={FadeInDown.delay(index * 60).duration(400)}>
       <Pressable
         style={({ pressed }) => [s.card, pressed && s.cardP]}
         onPress={() =>
@@ -68,7 +91,6 @@ export default function ArtisansScreen() {
         }
         accessibilityRole="button"
       >
-        {/* Avatar */}
         <View
           style={[
             s.avatar,
@@ -83,7 +105,6 @@ export default function ArtisansScreen() {
           <Text style={s.avatarTxt}>{item.initials}</Text>
         </View>
 
-        {/* Infos */}
         <View style={s.info}>
           <View style={s.nameRow}>
             <Text style={s.name}>
@@ -134,13 +155,11 @@ export default function ArtisansScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={s.header}>
         <Pressable
           style={({ pressed }) => [s.backBtn, pressed && s.op]}
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Retour"
           hitSlop={12}
         >
           <Ionicons name="arrow-back" size={22} color={brand.gray800} />
@@ -149,7 +168,6 @@ export default function ArtisansScreen() {
         <View style={s.backBtn} />
       </View>
 
-      {/* Filtres */}
       <View style={s.filterRow}>
         {FILTERS.map((f) => (
           <Pressable
@@ -158,10 +176,7 @@ export default function ArtisansScreen() {
             onPress={() => setFilter(f.key)}
           >
             <Text
-              style={[
-                s.filterTxt,
-                filter === f.key && s.filterTxtActive,
-              ]}
+              style={[s.filterTxt, filter === f.key && s.filterTxtActive]}
             >
               {f.label}
             </Text>
@@ -169,30 +184,50 @@ export default function ArtisansScreen() {
         ))}
       </View>
 
-      {/* Nombre de résultats */}
-      <View style={s.resultRow}>
-        <Text style={s.resultTxt}>
-          {artisans.length} artisan{artisans.length > 1 ? "s" : ""} disponible
-          {artisans.length > 1 ? "s" : ""}
-        </Text>
-      </View>
-
-      {/* Liste */}
-      <FlatList
-        data={artisans}
-        keyExtractor={(item) => item.id}
-        renderItem={renderArtisan}
-        contentContainerStyle={s.list}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={s.empty}>
-            <Ionicons name="search-outline" size={32} color={brand.gray400} />
-            <Text style={s.emptyTxt}>
-              Aucun artisan disponible pour ce filtre.
+      {loading ? (
+        <View style={s.loader}>
+          <ActivityIndicator size="large" color={brand.primary500} />
+          <Text style={s.loaderTxt}>Chargement des artisans…</Text>
+        </View>
+      ) : error ? (
+        <View style={s.errorBox}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={32}
+            color={brand.danger500}
+          />
+          <Text style={s.errorTxt}>{error}</Text>
+        </View>
+      ) : (
+        <>
+          <View style={s.resultRow}>
+            <Text style={s.resultTxt}>
+              {filtered.length} artisan{filtered.length > 1 ? "s" : ""}{" "}
+              disponible{filtered.length > 1 ? "s" : ""}
             </Text>
           </View>
-        }
-      />
+
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id}
+            renderItem={renderArtisan}
+            contentContainerStyle={s.list}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={s.empty}>
+                <Ionicons
+                  name="search-outline"
+                  size={32}
+                  color={brand.gray400}
+                />
+                <Text style={s.emptyTxt}>
+                  Aucun artisan ne correspond à ce filtre.
+                </Text>
+              </View>
+            }
+          />
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -247,6 +282,23 @@ const s = StyleSheet.create({
   },
   filterTxt: { ...T.xs, fontWeight: "600", color: brand.gray600 },
   filterTxtActive: { color: brand.white },
+
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: space.md,
+  },
+  loaderTxt: { ...T.sm, color: brand.gray500 },
+
+  errorBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.xl,
+  },
+  errorTxt: { ...T.base, color: brand.danger700, textAlign: "center" },
 
   resultRow: {
     paddingHorizontal: space.lg,
@@ -303,7 +355,7 @@ const s = StyleSheet.create({
 
   empty: {
     alignItems: "center",
-    paddingVertical: space["3xl"],
+    paddingVertical: 60,
     gap: space.md,
   },
   emptyTxt: { ...T.base, color: brand.gray500, textAlign: "center" },

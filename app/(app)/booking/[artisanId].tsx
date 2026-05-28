@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -14,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { brand, space, radius, shadow, text as T } from "@/constants/theme";
-import { ARTISANS } from "@/constants/mockData";
+import { getArtisan, createBooking, type Artisan } from "@/lib/api";
 
 const TIME_SLOTS = [
   "09:00", "10:00", "11:00", "12:00",
@@ -22,7 +23,6 @@ const TIME_SLOTS = [
   "18:00", "19:00", "20:00", "21:00",
 ];
 
-// Marque quelques créneaux comme indisponibles pour le réalisme
 const UNAVAILABLE_SLOTS = new Set(["09:00", "12:00", "15:00", "19:00"]);
 
 function getNext7Days(): { date: Date; key: string }[] {
@@ -44,18 +44,42 @@ const MONTH_NAMES = [
 export default function BookingScreen() {
   const router = useRouter();
   const { artisanId } = useLocalSearchParams<{ artisanId: string }>();
-  const artisan = useMemo(
-    () => ARTISANS.find((a) => a.id === artisanId),
-    [artisanId],
-  );
+
+  const [artisan, setArtisan] = useState<Artisan | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const days = useMemo(() => getNext7Days(), []);
   const [selectedDay, setSelectedDay] = useState<string>(days[0].key);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [selectedService, setSelectedService] = useState<string | null>(
-    artisan?.services[0] ?? null,
-  );
+  const [selectedService, setSelectedService] = useState<string | null>(null);
   const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    getArtisan(artisanId)
+      .then((a) => {
+        if (!mounted) return;
+        setArtisan(a);
+        if (a && a.services.length > 0) setSelectedService(a.services[0]);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [artisanId]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.loader}>
+          <ActivityIndicator size="large" color={brand.primary500} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!artisan) {
     return (
@@ -65,10 +89,10 @@ export default function BookingScreen() {
     );
   }
 
-  const canConfirm = !!selectedSlot && !!selectedService;
+  const canConfirm = !!selectedSlot && !!selectedService && !submitting;
 
   const handleConfirm = () => {
-    if (!canConfirm) return;
+    if (!canConfirm || !selectedSlot || !selectedService) return;
 
     const day = days.find((d) => d.key === selectedDay);
     if (!day) return;
@@ -82,20 +106,38 @@ export default function BookingScreen() {
         { text: "Annuler", style: "cancel" },
         {
           text: "Confirmer",
-          onPress: () => {
-            Alert.alert(
-              "Réservé !",
-              "Votre demande a été envoyée. Vous recevrez une confirmation sous peu.",
-              [
-                {
-                  text: "OK",
-                  onPress: () => {
-                    router.dismissAll();
-                    router.replace("/(app)/(tabs)/bookings");
+          onPress: async () => {
+            setSubmitting(true);
+            try {
+              await createBooking({
+                artisanId: artisan.id,
+                service: selectedService,
+                bookingDate: selectedDay,
+                bookingTime: selectedSlot,
+                description: description.trim() || undefined,
+                priceEstimate: artisan.priceRange,
+                acompte: 20,
+              });
+
+              Alert.alert(
+                "Réservé !",
+                "Votre demande a été envoyée. Vous recevrez une confirmation sous peu.",
+                [
+                  {
+                    text: "Voir mes RDV",
+                    onPress: () => {
+                      router.dismissAll();
+                      router.replace("/(app)/(tabs)/bookings");
+                    },
                   },
-                },
-              ],
-            );
+                ],
+              );
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : "Erreur inconnue";
+              Alert.alert("Erreur", `Impossible de créer la réservation : ${msg}`);
+            } finally {
+              setSubmitting(false);
+            }
           },
         },
       ],
@@ -106,7 +148,6 @@ export default function BookingScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={s.header}>
         <Pressable
           style={({ pressed }) => [s.hBtn, pressed && s.op]}
@@ -124,7 +165,6 @@ export default function BookingScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
       >
-        {/* Carte artisan */}
         <Animated.View entering={FadeInDown.delay(50).duration(400)} style={s.artCard}>
           <View style={s.artAvatar}>
             <Text style={s.artAvatarTxt}>{artisan.initials}</Text>
@@ -142,7 +182,6 @@ export default function BookingScreen() {
           </View>
         </Animated.View>
 
-        {/* Service */}
         <Animated.View entering={FadeInDown.delay(120).duration(400)}>
           <Text style={s.secTitle}>Quel service ?</Text>
           <View style={s.svcWrap}>
@@ -156,10 +195,7 @@ export default function BookingScreen() {
                 onPress={() => setSelectedService(svc)}
               >
                 <Text
-                  style={[
-                    s.svcTxt,
-                    selectedService === svc && s.svcTxtActive,
-                  ]}
+                  style={[s.svcTxt, selectedService === svc && s.svcTxtActive]}
                 >
                   {svc}
                 </Text>
@@ -168,7 +204,6 @@ export default function BookingScreen() {
           </View>
         </Animated.View>
 
-        {/* Jour */}
         <Animated.View entering={FadeInDown.delay(180).duration(400)}>
           <Text style={s.secTitle}>Choisissez une date</Text>
           <ScrollView
@@ -202,7 +237,6 @@ export default function BookingScreen() {
           </ScrollView>
         </Animated.View>
 
-        {/* Créneau */}
         <Animated.View entering={FadeInDown.delay(240).duration(400)}>
           <Text style={s.secTitle}>Choisissez un créneau</Text>
           <View style={s.slotGrid}>
@@ -235,7 +269,6 @@ export default function BookingScreen() {
           </View>
         </Animated.View>
 
-        {/* Description */}
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <Text style={s.secTitle}>Décrivez votre besoin</Text>
           <View style={s.textBox}>
@@ -252,7 +285,6 @@ export default function BookingScreen() {
           </View>
         </Animated.View>
 
-        {/* Récap */}
         <Animated.View
           entering={FadeInDown.delay(360).duration(400)}
           style={s.recapCard}
@@ -280,7 +312,6 @@ export default function BookingScreen() {
         <View style={s.spacer} />
       </ScrollView>
 
-      {/* CTA fixe */}
       <View style={s.ctaBar}>
         <Pressable
           style={({ pressed }) => [
@@ -292,13 +323,21 @@ export default function BookingScreen() {
           disabled={!canConfirm}
           accessibilityRole="button"
         >
-          <Text style={s.ctaTxt}>
-            {canConfirm
-              ? "Confirmer la réservation"
-              : "Sélectionnez un créneau"}
-          </Text>
-          {canConfirm && (
-            <Ionicons name="arrow-forward" size={20} color={brand.white} />
+          {submitting ? (
+            <ActivityIndicator color={brand.white} />
+          ) : (
+            <>
+              <Text style={s.ctaTxt}>
+                {canConfirm
+                  ? "Confirmer la réservation"
+                  : selectedService
+                    ? "Sélectionnez un créneau"
+                    : "Sélectionnez un service"}
+              </Text>
+              {canConfirm && (
+                <Ionicons name="arrow-forward" size={20} color={brand.white} />
+              )}
+            </>
           )}
         </Pressable>
       </View>
@@ -308,6 +347,11 @@ export default function BookingScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: brand.gray50 },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   notFound: { ...T.base, color: brand.gray500, textAlign: "center", marginTop: 100 },
 
   header: {
@@ -445,11 +489,7 @@ const s = StyleSheet.create({
     marginBottom: space.xl,
     minHeight: 100,
   },
-  textInput: {
-    ...T.base,
-    color: brand.gray900,
-    minHeight: 80,
-  },
+  textInput: { ...T.base, color: brand.gray900, minHeight: 80 },
 
   recapCard: {
     backgroundColor: brand.white,
