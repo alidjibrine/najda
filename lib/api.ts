@@ -316,3 +316,144 @@ export async function cancelBooking(id: string): Promise<void> {
 
   if (error) throw error;
 }
+
+// =========================
+// API Profiles
+// =========================
+
+type DbProfile = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Profile = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  isComplete: boolean;
+};
+
+function mapProfile(db: DbProfile): Profile {
+  const profile: Profile = {
+    id: db.id,
+    firstName: db.first_name ?? "",
+    lastName: db.last_name ?? "",
+    phone: db.phone ?? "",
+    address: db.address ?? "",
+    city: db.city ?? "",
+    postalCode: db.postal_code ?? "",
+    isComplete: false,
+  };
+  profile.isComplete = !!(
+    profile.firstName &&
+    profile.lastName &&
+    profile.phone &&
+    profile.city
+  );
+  return profile;
+}
+
+export async function getMyProfile(): Promise<Profile | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    // Crée le profil s'il n'existe pas encore (filet de sécurité)
+    const { data: created, error: insertErr } = await supabase
+      .from("profiles")
+      .insert({ id: user.id })
+      .select()
+      .single();
+    if (insertErr) throw insertErr;
+    return mapProfile(created as DbProfile);
+  }
+  return mapProfile(data as DbProfile);
+}
+
+export async function updateMyProfile(input: {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+}): Promise<Profile> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Vous devez être connecté.");
+
+  const update: Record<string, string | null> = {};
+  if (input.firstName !== undefined) update.first_name = input.firstName.trim() || null;
+  if (input.lastName !== undefined) update.last_name = input.lastName.trim() || null;
+  if (input.phone !== undefined) update.phone = input.phone.trim() || null;
+  if (input.address !== undefined) update.address = input.address.trim() || null;
+  if (input.city !== undefined) update.city = input.city.trim() || null;
+  if (input.postalCode !== undefined) update.postal_code = input.postalCode.trim() || null;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(update)
+    .eq("id", user.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return mapProfile(data as DbProfile);
+}
+
+// =========================
+// API Search
+// =========================
+
+export async function searchArtisans(query: string): Promise<Artisan[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  // Recherche dans first_name, last_name, bio, services et category_id
+  const pattern = `%${q.toLowerCase()}%`;
+
+  const { data, error } = await supabase
+    .from("artisans")
+    .select("*")
+    .or(
+      `first_name.ilike.${pattern},last_name.ilike.${pattern},bio.ilike.${pattern},category_id.ilike.${pattern}`,
+    )
+    .order("rating", { ascending: false })
+    .limit(20);
+
+  if (error) throw error;
+
+  // Filtrage supplémentaire côté client pour les services (PostgreSQL array)
+  let results = (data as DbArtisan[]).map(mapArtisan);
+  const lowerQ = q.toLowerCase();
+  const extraMatches = results.filter((a) =>
+    a.services.some((s) => s.toLowerCase().includes(lowerQ)),
+  );
+  // Fusionne (déjà dans results) — pas de doublon ici car même source
+  if (extraMatches.length > 0 && results.length === 0) {
+    results = extraMatches;
+  }
+
+  return results;
+}

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -12,26 +12,52 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { brand, space, radius, shadow, text as T } from "@/constants/theme";
+import { getMyProfile, type Profile } from "@/lib/api";
 
 type MenuItem = {
   id: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  color?: string;
-  danger?: boolean;
   onPress?: () => void;
 };
 
-function deriveInitial(email: string | undefined): string {
-  if (!email) return "?";
-  return email.charAt(0).toUpperCase();
+function deriveInitial(profile: Profile | null, email: string | undefined): string {
+  if (profile?.firstName) return profile.firstName.charAt(0).toUpperCase();
+  if (email) return email.charAt(0).toUpperCase();
+  return "?";
 }
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
-  const initial = useMemo(() => deriveInitial(user?.email), [user]);
+  const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      getMyProfile().then((p) => {
+        if (mounted) setProfile(p);
+      });
+      return () => {
+        mounted = false;
+      };
+    }, []),
+  );
+
+  const initial = useMemo(
+    () => deriveInitial(profile, user?.email),
+    [profile, user],
+  );
+
+  const displayName = useMemo(() => {
+    if (profile?.firstName && profile?.lastName) {
+      return `${profile.firstName} ${profile.lastName}`;
+    }
+    return user?.email ?? "Membre Najda";
+  }, [profile, user]);
 
   const handleSignOut = () => {
     Alert.alert(
@@ -52,9 +78,24 @@ export default function ProfileScreen() {
     Alert.alert(label, "Cette fonctionnalité sera disponible prochainement.");
 
   const accountItems: MenuItem[] = [
-    { id: "info", label: "Mes informations", icon: "person-outline", onPress: placeholder("Mes informations") },
-    { id: "addresses", label: "Mes adresses", icon: "location-outline", onPress: placeholder("Mes adresses") },
-    { id: "payment", label: "Moyens de paiement", icon: "card-outline", onPress: placeholder("Moyens de paiement") },
+    {
+      id: "info",
+      label: "Mes informations",
+      icon: "person-outline",
+      onPress: () => router.push("/(app)/profile-edit"),
+    },
+    {
+      id: "addresses",
+      label: "Mes adresses",
+      icon: "location-outline",
+      onPress: () => router.push("/(app)/profile-edit"),
+    },
+    {
+      id: "payment",
+      label: "Moyens de paiement",
+      icon: "card-outline",
+      onPress: placeholder("Moyens de paiement"),
+    },
   ];
 
   const preferencesItems: MenuItem[] = [
@@ -78,7 +119,6 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
       >
-        {/* Header avec gradient */}
         <Animated.View entering={FadeInDown.duration(400)}>
           <LinearGradient
             colors={[brand.primary500, brand.primary700]}
@@ -89,17 +129,22 @@ export default function ProfileScreen() {
             <View style={s.avatar}>
               <Text style={s.avatarTxt}>{initial}</Text>
             </View>
+            <Text style={s.name} numberOfLines={1}>
+              {displayName}
+            </Text>
             <Text style={s.email} numberOfLines={1}>
               {user?.email}
             </Text>
-            <View style={s.memberBadge}>
-              <Ionicons name="shield-checkmark" size={12} color={brand.gold500} />
-              <Text style={s.memberTxt}>Membre Najda</Text>
-            </View>
+            <Pressable
+              style={({ pressed }) => [s.editBtn, pressed && s.op]}
+              onPress={() => router.push("/(app)/profile-edit")}
+            >
+              <Ionicons name="create-outline" size={14} color={brand.white} />
+              <Text style={s.editBtnTxt}>Modifier mon profil</Text>
+            </Pressable>
           </LinearGradient>
         </Animated.View>
 
-        {/* Section Compte */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <Text style={s.sectionTitle}>Compte</Text>
           <View style={s.menuCard}>
@@ -113,7 +158,6 @@ export default function ProfileScreen() {
           </View>
         </Animated.View>
 
-        {/* Section Préférences */}
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
           <Text style={s.sectionTitle}>Préférences</Text>
           <View style={s.menuCard}>
@@ -127,7 +171,6 @@ export default function ProfileScreen() {
           </View>
         </Animated.View>
 
-        {/* Section Support */}
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <Text style={s.sectionTitle}>Aide & informations</Text>
           <View style={s.menuCard}>
@@ -141,12 +184,10 @@ export default function ProfileScreen() {
           </View>
         </Animated.View>
 
-        {/* Déconnexion */}
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <Pressable
             style={({ pressed }) => [s.logoutBtn, pressed && s.logoutP]}
             onPress={handleSignOut}
-            accessibilityRole="button"
           >
             <Ionicons name="log-out-outline" size={20} color={brand.danger600} />
             <Text style={s.logoutTxt}>Se déconnecter</Text>
@@ -167,11 +208,7 @@ function MenuRow({ item, isLast }: { item: MenuItem; isLast: boolean }) {
       accessibilityRole="button"
     >
       <View style={s.rowIcon}>
-        <Ionicons
-          name={item.icon}
-          size={20}
-          color={item.color ?? brand.gray700}
-        />
+        <Ionicons name={item.icon} size={20} color={brand.gray700} />
       </View>
       <Text style={s.rowLabel}>{item.label}</Text>
       <Ionicons name="chevron-forward" size={18} color={brand.gray300} />
@@ -202,29 +239,37 @@ const s = StyleSheet.create({
     marginBottom: space.md,
   },
   avatarTxt: { fontSize: 28, fontWeight: "700", color: brand.white },
-  email: {
-    ...T.base,
-    fontWeight: "600",
+  name: {
+    ...T.lg,
+    fontWeight: "700",
     color: brand.white,
-    marginBottom: space.sm,
+    marginBottom: 2,
+    maxWidth: 280,
+    textAlign: "center",
+  },
+  email: {
+    ...T.sm,
+    color: "rgba(255,255,255,0.7)",
+    marginBottom: space.md,
     maxWidth: 280,
   },
-  memberBadge: {
+  editBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderColor: "rgba(255,255,255,0.3)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: radius.full,
   },
-  memberTxt: {
+  editBtnTxt: {
     ...T.xs,
     fontWeight: "600",
     color: brand.white,
   },
+  op: { opacity: 0.7 },
 
   sectionTitle: {
     ...T.xs,

@@ -57,8 +57,7 @@ export default function HomeScreen() {
       pathname: "/(app)/artisans",
       params: { category: svc.id, categoryName: svc.name },
     });
-  const tapSearch = () =>
-    Alert.alert("Recherche", "La recherche sera activée prochainement.");
+  const tapSearch = () => router.push("/(app)/search");
   const tapProfile = () => router.push("/(app)/(tabs)/profile");
 
   return (
