@@ -41,10 +41,10 @@ export default function ArtisanDetailScreen() {
   }
 
   const handleBook = () => {
-    Alert.alert(
-      "Réservation",
-      `La réservation de créneau avec ${artisan.firstName} sera disponible prochainement.`,
-    );
+    router.push({
+      pathname: "/(app)/booking/[artisanId]",
+      params: { artisanId: artisan.id },
+    });
   };
 
   const handleCall = () => {

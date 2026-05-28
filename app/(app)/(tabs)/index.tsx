@@ -45,7 +45,7 @@ function deriveInitial(email: string | undefined): string {
 }
 
 export default function HomeScreen() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const initial = useMemo(() => deriveInitial(user?.email), [user]);
 
@@ -59,17 +59,12 @@ export default function HomeScreen() {
     });
   const tapSearch = () =>
     Alert.alert("Recherche", "La recherche sera activée prochainement.");
-  const tapAccount = () =>
-    Alert.alert("Mon compte", user?.email ?? "", [
-      { text: "Fermer", style: "cancel" },
-      { text: "Se déconnecter", style: "destructive", onPress: () => signOut() },
-    ]);
+  const tapProfile = () => router.push("/(app)/(tabs)/profile");
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={s.header}>
         <View style={s.headerLeft}>
           <View style={s.hLogo}>
@@ -79,7 +74,7 @@ export default function HomeScreen() {
         </View>
         <Pressable
           style={({ pressed }) => [s.avatar, pressed && s.op]}
-          onPress={tapAccount}
+          onPress={tapProfile}
           accessibilityRole="button"
         >
           <Text style={s.avatarTxt}>{initial}</Text>
@@ -87,7 +82,6 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-        {/* Recherche */}
         <Animated.View entering={FadeInDown.delay(50).duration(400)}>
           <Pressable
             onPress={tapSearch}
@@ -101,7 +95,6 @@ export default function HomeScreen() {
           </Pressable>
         </Animated.View>
 
-        {/* Urgences — grandes cartes gradient */}
         <Animated.View entering={FadeInDown.delay(150).duration(400)}>
           <View style={s.secHead}>
             <View style={s.secHeadL}>
@@ -139,7 +132,6 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* Tous les services */}
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <View style={s.secHead}>
             <Text style={s.secTitle}>Tous les services</Text>
@@ -163,23 +155,6 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* RDV */}
-        <Animated.View entering={FadeInDown.delay(450).duration(400)}>
-          <View style={s.secHead}>
-            <Text style={s.secTitle}>Prochain rendez-vous</Text>
-          </View>
-          <View style={s.empty}>
-            <View style={s.emptyCircle}>
-              <Ionicons name="calendar-outline" size={26} color={brand.primary400} />
-            </View>
-            <Text style={s.emptyT}>Aucun rendez-vous</Text>
-            <Text style={s.emptyS}>
-              Réservez un artisan et votre prochain{"\n"}rendez-vous apparaîtra ici.
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Signature */}
         <View style={s.sig}>
           <View style={s.sigL} />
           <Ionicons name="shield-checkmark" size={13} color={brand.gold500} />
@@ -271,28 +246,15 @@ const s = StyleSheet.create({
     minHeight: 76,
   },
   urgTxt: { flex: 1 },
-  urgName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: brand.white,
-    letterSpacing: -0.3,
-  },
-  urgSub: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.75)",
-    marginTop: 2,
-  },
+  urgName: { fontSize: 16, fontWeight: "700", color: brand.white, letterSpacing: -0.3 },
+  urgSub: { fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 2 },
   urgBadge: {
     backgroundColor: "rgba(255,255,255,0.25)",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.full,
   },
-  urgBadgeTxt: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: brand.white,
-  },
+  urgBadgeTxt: { fontSize: 11, fontWeight: "700", color: brand.white },
   cardP: { opacity: 0.85, transform: [{ scale: 0.98 }] },
 
   grid: {
@@ -325,27 +287,6 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   gSub: { ...T.xs, color: brand.gray500 },
-
-  empty: {
-    backgroundColor: brand.white,
-    borderRadius: radius.xl,
-    padding: space.xl,
-    alignItems: "center",
-    gap: 10,
-    marginBottom: space.xl,
-    ...shadow.sm,
-  },
-  emptyCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.full,
-    backgroundColor: brand.primary50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  emptyT: { ...T.base, fontWeight: "600", color: brand.gray800 },
-  emptyS: { ...T.sm, color: brand.gray500, textAlign: "center", lineHeight: 20 },
 
   sig: {
     flexDirection: "row",

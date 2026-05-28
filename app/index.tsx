@@ -22,9 +22,9 @@ export default function Index() {
   }
 
   return session ? (
-    <Redirect href="/(app)/home" />
+    <Redirect href="/(app)/(tabs)" />
   ) : (
-    <Redirect href="/(auth)/login" />
+    <Redirect href="/(auth)/splash" />
   );
 }
 
