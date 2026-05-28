@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,9 +16,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { brand, space, radius, shadow, comp, text as T } from "@/constants/theme";
-import { getMyProfile, updateMyProfile, type Profile } from "@/lib/api";
+import {
+  getMyProfile,
+  updateMyProfile,
+  uploadAvatar,
+  deleteAvatar,
+  type Profile,
+} from "@/lib/api";
 
 export default function ProfileEditScreen() {
   const router = useRouter();
@@ -29,8 +37,10 @@ export default function ProfileEditScreen() {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
 
   const lastNameRef = useRef<TextInput>(null);
@@ -51,6 +61,7 @@ export default function ProfileEditScreen() {
         setAddress(p.address);
         setCity(p.city);
         setPostalCode(p.postalCode);
+        setAvatarUrl(p.avatarUrl);
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -90,6 +101,101 @@ export default function ProfileEditScreen() {
       setSubmitting(false);
     }
   };
+
+  const pickFromLibrary = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Autorisation requise", "Najda a besoin d'accéder à votre galerie.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await doUpload(result.assets[0].uri);
+  };
+
+  const pickFromCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Autorisation requise", "Najda a besoin d'accéder à votre appareil photo.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await doUpload(result.assets[0].uri);
+  };
+
+  const doUpload = async (uri: string) => {
+    setPhotoBusy(true);
+    try {
+      const url = await uploadAvatar(uri);
+      setAvatarUrl(url);
+    } catch (e: unknown) {
+      Alert.alert(
+        "Erreur",
+        e instanceof Error ? e.message : "Impossible d'uploader la photo.",
+      );
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const doDelete = () => {
+    Alert.alert(
+      "Supprimer la photo ?",
+      "Votre avatar sera supprimé. Vous pourrez en remettre une plus tard.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            setPhotoBusy(true);
+            try {
+              await deleteAvatar();
+              setAvatarUrl(null);
+            } catch (e: unknown) {
+              Alert.alert(
+                "Erreur",
+                e instanceof Error ? e.message : "Impossible de supprimer la photo.",
+              );
+            } finally {
+              setPhotoBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openPhotoMenu = () => {
+    const hasPhoto = !!avatarUrl;
+    Alert.alert(
+      hasPhoto ? "Modifier la photo" : "Ajouter une photo",
+      undefined,
+      [
+        { text: "Prendre une photo", onPress: pickFromCamera },
+        { text: "Choisir depuis la galerie", onPress: pickFromLibrary },
+        ...(hasPhoto
+          ? ([
+              { text: "Supprimer la photo", style: "destructive" as const, onPress: doDelete },
+            ])
+          : []),
+        { text: "Annuler", style: "cancel" as const },
+      ],
+    );
+  };
+
+  const initial = firstName.charAt(0).toUpperCase() || "?";
 
   if (loading) {
     return (
@@ -169,7 +275,43 @@ export default function ProfileEditScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeInDown.delay(50).duration(400)}>
+          {/* Photo de profil */}
+          <Animated.View
+            entering={FadeInDown.delay(50).duration(400)}
+            style={s.photoBlock}
+          >
+            <Pressable
+              onPress={openPhotoMenu}
+              disabled={photoBusy}
+              style={({ pressed }) => [s.avatarWrap, pressed && s.op]}
+            >
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={s.avatarImg} />
+              ) : (
+                <View style={s.avatarPlaceholder}>
+                  <Text style={s.avatarInitial}>{initial}</Text>
+                </View>
+              )}
+              <View style={s.cameraBtn}>
+                {photoBusy ? (
+                  <ActivityIndicator color={brand.white} size="small" />
+                ) : (
+                  <Ionicons
+                    name={avatarUrl ? "create" : "camera"}
+                    size={16}
+                    color={brand.white}
+                  />
+                )}
+              </View>
+            </Pressable>
+            <Pressable onPress={openPhotoMenu} disabled={photoBusy} hitSlop={8}>
+              <Text style={s.photoLink}>
+                {avatarUrl ? "Modifier la photo" : "Ajouter une photo"}
+              </Text>
+            </Pressable>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(120).duration(400)}>
             <Text style={s.sectionTitle}>Identité</Text>
             <View style={s.fields}>
               <View style={s.row}>
@@ -201,7 +343,7 @@ export default function ProfileEditScreen() {
             </View>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(150).duration(400)}>
+          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <Text style={s.sectionTitle}>Adresse</Text>
             <View style={s.fields}>
               {renderField("Adresse", address, setAddress, "address", {
@@ -234,7 +376,7 @@ export default function ProfileEditScreen() {
           </Animated.View>
 
           <Animated.View
-            entering={FadeInDown.delay(250).duration(400)}
+            entering={FadeInDown.delay(300).duration(400)}
             style={s.privacy}
           >
             <Ionicons
@@ -298,6 +440,51 @@ const s = StyleSheet.create({
   hTitle: { ...T.lg, fontWeight: "700", color: brand.gray900, letterSpacing: -0.3 },
 
   scroll: { padding: space.lg, paddingBottom: 100 },
+
+  photoBlock: {
+    alignItems: "center",
+    gap: 12,
+    marginBottom: space.xl,
+  },
+  avatarWrap: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    ...shadow.md,
+  },
+  avatarImg: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: brand.gray200,
+  },
+  avatarPlaceholder: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: brand.primary500,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarInitial: { fontSize: 40, fontWeight: "700", color: brand.white },
+  cameraBtn: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: brand.primary500,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 3,
+    borderColor: brand.gray50,
+  },
+  photoLink: {
+    ...T.sm,
+    fontWeight: "600",
+    color: brand.primary500,
+  },
 
   sectionTitle: {
     ...T.xs,

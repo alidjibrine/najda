@@ -329,6 +329,7 @@ type DbProfile = {
   address: string | null;
   city: string | null;
   postal_code: string | null;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -341,6 +342,7 @@ export type Profile = {
   address: string;
   city: string;
   postalCode: string;
+  avatarUrl: string | null;
   isComplete: boolean;
 };
 
@@ -353,6 +355,7 @@ function mapProfile(db: DbProfile): Profile {
     address: db.address ?? "",
     city: db.city ?? "",
     postalCode: db.postal_code ?? "",
+    avatarUrl: db.avatar_url ?? null,
     isComplete: false,
   };
   profile.isComplete = !!(
@@ -397,6 +400,7 @@ export async function updateMyProfile(input: {
   address?: string;
   city?: string;
   postalCode?: string;
+  avatarUrl?: string | null;
 }): Promise<Profile> {
   const {
     data: { user },
@@ -410,6 +414,7 @@ export async function updateMyProfile(input: {
   if (input.address !== undefined) update.address = input.address.trim() || null;
   if (input.city !== undefined) update.city = input.city.trim() || null;
   if (input.postalCode !== undefined) update.postal_code = input.postalCode.trim() || null;
+  if (input.avatarUrl !== undefined) update.avatar_url = input.avatarUrl;
 
   const { data, error } = await supabase
     .from("profiles")
@@ -420,6 +425,70 @@ export async function updateMyProfile(input: {
 
   if (error) throw error;
   return mapProfile(data as DbProfile);
+}
+
+// =========================
+// Avatar (Storage)
+// =========================
+
+import * as FileSystem from "expo-file-system/legacy";
+import { decode } from "base64-arraybuffer";
+
+/**
+ * Upload une photo de profil dans le bucket "avatars".
+ * Path: {userId}/avatar.{ext}
+ * Met à jour profiles.avatar_url avec l'URL publique (avec cache buster).
+ */
+export async function uploadAvatar(localUri: string): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Vous devez être connecté.");
+
+  const extMatch = localUri.match(/\.(\w+)(\?.*)?$/);
+  const ext = (extMatch?.[1] ?? "jpg").toLowerCase();
+  const safeExt = ext === "jpeg" ? "jpg" : ext;
+  const filePath = `${user.id}/avatar.${safeExt}`;
+  const contentType =
+    safeExt === "png" ? "image/png" : safeExt === "webp" ? "image/webp" : "image/jpeg";
+
+  const base64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  const { error: uploadErr } = await supabase.storage
+    .from("avatars")
+    .upload(filePath, decode(base64), {
+      contentType,
+      upsert: true,
+    });
+  if (uploadErr) throw uploadErr;
+
+  const { data: urlData } = supabase.storage
+    .from("avatars")
+    .getPublicUrl(filePath);
+
+  // Cache buster pour forcer le rafraîchissement client après modification
+  const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+  await updateMyProfile({ avatarUrl: publicUrl });
+  return publicUrl;
+}
+
+/**
+ * Supprime la photo de profil (fichier Storage + champ avatar_url).
+ */
+export async function deleteAvatar(): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Vous devez être connecté.");
+
+  // Tente de supprimer les extensions courantes
+  const candidates = ["jpg", "png", "webp"].map((e) => `${user.id}/avatar.${e}`);
+  await supabase.storage.from("avatars").remove(candidates);
+
+  await updateMyProfile({ avatarUrl: null });
 }
 
 // =========================

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StatusBar,
@@ -85,12 +86,6 @@ export default function ProfileScreen() {
       onPress: () => router.push("/(app)/profile-edit"),
     },
     {
-      id: "addresses",
-      label: "Mes adresses",
-      icon: "location-outline",
-      onPress: () => router.push("/(app)/profile-edit"),
-    },
-    {
       id: "payment",
       label: "Moyens de paiement",
       icon: "card-outline",
@@ -126,9 +121,16 @@ export default function ProfileScreen() {
             end={{ x: 1, y: 1 }}
             style={s.heroCard}
           >
-            <View style={s.avatar}>
-              <Text style={s.avatarTxt}>{initial}</Text>
-            </View>
+            {profile?.avatarUrl ? (
+              <Image
+                source={{ uri: profile.avatarUrl }}
+                style={s.avatarImg}
+              />
+            ) : (
+              <View style={s.avatar}>
+                <Text style={s.avatarTxt}>{initial}</Text>
+              </View>
+            )}
             <Text style={s.name} numberOfLines={1}>
               {displayName}
             </Text>
@@ -237,6 +239,15 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: space.md,
+  },
+  avatarImg: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.full,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.4)",
+    marginBottom: space.md,
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   avatarTxt: { fontSize: 28, fontWeight: "700", color: brand.white },
   name: {
