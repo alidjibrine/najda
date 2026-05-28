@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { brand, space, radius, shadow, text as T, comp } from "@/constants/theme";
 
@@ -45,13 +46,17 @@ function deriveInitial(email: string | undefined): string {
 
 export default function HomeScreen() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
   const initial = useMemo(() => deriveInitial(user?.email), [user]);
 
   const urgent = SERVICES.filter((sv) => sv.urgent);
   const other = SERVICES.filter((sv) => !sv.urgent);
 
   const tap = (svc: Service) =>
-    Alert.alert(svc.name, "La recherche d'artisans sera disponible prochainement.");
+    router.push({
+      pathname: "/(app)/artisans",
+      params: { category: svc.id, categoryName: svc.name },
+    });
   const tapSearch = () =>
     Alert.alert("Recherche", "La recherche sera activée prochainement.");
   const tapAccount = () =>
