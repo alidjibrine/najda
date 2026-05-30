@@ -1,6 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -10,155 +12,413 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import MapView, { Marker, PROVIDER_DEFAULT, Region } from "react-native-maps";
+import * as Location from "expo-location";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { brand, space, radius, shadow, text as T, comp } from "@/constants/theme";
+import {
+  getMyProfile,
+  getAllArtisans,
+  getMyBookings,
+  availabilityLabel,
+  availabilityColor,
+  type Profile,
+  type Artisan,
+  type Booking,
+} from "@/lib/api";
+import { getStoredCity, setStoredCity, POPULAR_CITIES } from "@/lib/storage";
+import { getCategory } from "@/constants/categories";
 
-type Service = {
-  id: string;
-  name: string;
-  sub: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  colors: [string, string];
-  iconColor: string;
-  urgent?: boolean;
+const DEFAULT_REGION: Region = {
+  latitude: 45.764,
+  longitude: 4.8357,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
 };
-
-const SERVICES: Service[] = [
-  { id: "plomberie", name: "Plomberie", sub: "Fuites · Robinets · Canalisations", icon: "water", colors: ["#3B82F6", "#1D4ED8"], iconColor: "#fff", urgent: true },
-  { id: "serrurerie", name: "Serrurerie", sub: "Portes · Serrures · Blindage", icon: "key", colors: ["#EF4444", "#B91C1C"], iconColor: "#fff", urgent: true },
-  { id: "electricite", name: "Électricité", sub: "Pannes · Prises · Tableaux", icon: "flash", colors: ["#F59E0B", "#B45309"], iconColor: "#fff", urgent: true },
-  { id: "chauffage", name: "Chauffage", sub: "Chaudières · Radiateurs", icon: "flame", colors: ["#F97316", "#C2410C"], iconColor: "#fff", urgent: true },
-  { id: "peinture", name: "Peinture", sub: "Intérieur · Extérieur", icon: "color-palette-outline", colors: ["#EDE9FE", "#EDE9FE"], iconColor: "#6D28D9" },
-  { id: "menuiserie", name: "Menuiserie", sub: "Portes · Fenêtres", icon: "hammer-outline", colors: ["#FDF9EE", "#FDF9EE"], iconColor: "#A88F3E" },
-  { id: "maconnerie", name: "Maçonnerie", sub: "Murs · Terrasses", icon: "cube-outline", colors: ["#F3F4F6", "#F3F4F6"], iconColor: "#374151" },
-  { id: "carrelage", name: "Carrelage", sub: "Sols · Murs", icon: "grid-outline", colors: ["#D1FAE5", "#D1FAE5"], iconColor: "#047857" },
-  { id: "climatisation", name: "Climatisation", sub: "Installation · Entretien", icon: "snow-outline", colors: ["#E0F2FE", "#E0F2FE"], iconColor: "#0369A1" },
-  { id: "jardinage", name: "Jardinage", sub: "Entretien · Élagage", icon: "leaf-outline", colors: ["#DCFCE7", "#DCFCE7"], iconColor: "#15803D" },
-];
-
-function deriveInitial(email: string | undefined): string {
-  if (!email) return "?";
-  return email.charAt(0).toUpperCase();
-}
 
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const initial = useMemo(() => deriveInitial(user?.email), [user]);
+  const mapRef = useRef<MapView>(null);
 
-  const urgent = SERVICES.filter((sv) => sv.urgent);
-  const other = SERVICES.filter((sv) => !sv.urgent);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [city, setCity] = useState<string>("Lyon");
+  const [artisans, setArtisans] = useState<Artisan[]>([]);
+  const [upcomingBooking, setUpcomingBooking] = useState<Booking | null>(null);
+  const [selectedArtisanId, setSelectedArtisanId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
-  const tap = (svc: Service) =>
-    router.push({
-      pathname: "/(app)/artisans",
-      params: { category: svc.id, categoryName: svc.name },
-    });
-  const tapSearch = () => router.push("/(app)/search");
-  const tapProfile = () => router.push("/(app)/(tabs)/profile");
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          setUserLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const loadData = useCallback(async () => {
+    const [p, ars, bookings, storedCity] = await Promise.all([
+      getMyProfile(),
+      getAllArtisans(),
+      getMyBookings("upcoming"),
+      getStoredCity(),
+    ]);
+    setProfile(p);
+    setArtisans(ars);
+    setUpcomingBooking(bookings[0] ?? null);
+    if (storedCity) setCity(storedCity);
+    else if (p?.city) setCity(p.city);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      loadData().catch(() => {});
+      return () => {
+        mounted = false;
+      };
+    }, [loadData]),
+  );
+
+  const geoArtisans = useMemo(
+    () => artisans.filter((a) => a.latitude != null && a.longitude != null),
+    [artisans],
+  );
+
+  const availableNowCount = useMemo(
+    () => geoArtisans.filter((a) => a.availability === "now" || a.availability === "today").length,
+    [geoArtisans],
+  );
+
+  const selectedArtisan = useMemo(
+    () => geoArtisans.find((a) => a.id === selectedArtisanId) ?? null,
+    [geoArtisans, selectedArtisanId],
+  );
+
+  const firstName = useMemo(() => {
+    if (profile?.firstName) return profile.firstName;
+    if (user?.email) {
+      const prefix = user.email.split("@")[0];
+      const clean = prefix.replace(/[^a-zA-Z]/g, "").slice(0, 8);
+      if (clean.length >= 2) return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+    }
+    return "";
+  }, [profile, user]);
+
+  const initial = (profile?.firstName?.charAt(0) ?? user?.email?.charAt(0) ?? "?").toUpperCase();
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 6) return "Bonne nuit";
+    if (h < 12) return "Bonjour";
+    if (h < 18) return "Bon après-midi";
+    return "Bonsoir";
+  }, []);
+
+  const pickCity = () => {
+    Alert.alert("Choisir une zone", undefined, [
+      ...POPULAR_CITIES.slice(0, 6).map((c) => ({
+        text: c,
+        onPress: async () => {
+          setCity(c);
+          await setStoredCity(c);
+        },
+      })),
+      { text: "Autres villes…", onPress: pickMoreCities },
+      { text: "Annuler", style: "cancel" as const },
+    ]);
+  };
+
+  const pickMoreCities = () => {
+    Alert.alert("Plus de villes", undefined, [
+      ...POPULAR_CITIES.slice(6).map((c) => ({
+        text: c,
+        onPress: async () => {
+          setCity(c);
+          await setStoredCity(c);
+        },
+      })),
+      { text: "Annuler", style: "cancel" as const },
+    ]);
+  };
+
+  const centerOnUser = () => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        ...userLocation,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+    } else {
+      Alert.alert(
+        "Localisation indisponible",
+        "Activez la localisation dans les paramètres pour utiliser cette fonction.",
+      );
+    }
+  };
+
+  const tapArtisanMarker = (id: string) => {
+    setSelectedArtisanId(id);
+    const a = artisans.find((x) => x.id === id);
+    if (a?.latitude && a?.longitude && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: a.latitude,
+        longitude: a.longitude,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      });
+    }
+  };
+
+  const openArtisan = (id: string) =>
+    router.push({ pathname: "/(app)/artisan/[id]", params: { id } });
+  const openBooking = () => router.push("/(app)/(tabs)/bookings");
+  const openSearch = () => router.push("/(app)/search");
+  const openProfile = () => router.push("/(app)/(tabs)/profile");
+  const openPrestations = () => router.push("/(app)/prestations");
+  const openNotif = () => Alert.alert("Notifications", "Aucune notification.");
+
+  const initialRegion: Region = userLocation
+    ? { ...userLocation, latitudeDelta: 0.03, longitudeDelta: 0.03 }
+    : DEFAULT_REGION;
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
+      {/* HEADER */}
       <View style={s.header}>
-        <View style={s.headerLeft}>
-          <View style={s.hLogo}>
-            <Ionicons name="construct" size={14} color={brand.white} />
-          </View>
-          <Text style={s.hName}>Najda</Text>
-        </View>
         <Pressable
-          style={({ pressed }) => [s.avatar, pressed && s.op]}
-          onPress={tapProfile}
-          accessibilityRole="button"
+          style={({ pressed }) => [s.headerLeft, pressed && s.op]}
+          onPress={openProfile}
         >
-          <Text style={s.avatarTxt}>{initial}</Text>
+          {profile?.avatarUrl ? (
+            <Image source={{ uri: profile.avatarUrl }} style={s.avatarImg} />
+          ) : (
+            <View style={s.avatar}>
+              <Text style={s.avatarTxt}>{initial}</Text>
+            </View>
+          )}
+          <View>
+            <Text style={s.hello}>
+              {greeting}
+              {firstName ? ` ${firstName}` : ""}
+            </Text>
+            <Pressable onPress={pickCity} hitSlop={6}>
+              <View style={s.cityRow}>
+                <Ionicons name="location" size={11} color={brand.primary500} />
+                <Text style={s.cityTxt}>{city}</Text>
+                <Ionicons name="chevron-down" size={11} color={brand.gray500} />
+              </View>
+            </Pressable>
+          </View>
         </Pressable>
+
+        <View style={s.headerRight}>
+          <Pressable
+            style={({ pressed }) => [s.iconBtn, pressed && s.op]}
+            onPress={openSearch}
+            hitSlop={6}
+          >
+            <Ionicons name="search" size={20} color={brand.gray700} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [s.iconBtn, pressed && s.op]}
+            onPress={openNotif}
+            hitSlop={6}
+          >
+            <Ionicons name="notifications-outline" size={20} color={brand.gray700} />
+            <View style={s.notifDot} />
+          </Pressable>
+        </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-        <Animated.View entering={FadeInDown.delay(50).duration(400)}>
-          <Pressable
-            onPress={tapSearch}
-            style={({ pressed }) => [s.search, pressed && s.searchP]}
-            accessibilityRole="search"
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.scroll}
+      >
+        {/* BOOKING WIDGET si actif */}
+        {upcomingBooking && upcomingBooking.artisan && (
+          <Animated.View entering={FadeInDown.duration(300)}>
+            <Pressable
+              style={({ pressed }) => [s.bookingWidget, pressed && s.cardP]}
+              onPress={openBooking}
+            >
+              <View style={s.bookingPulse}>
+                <View style={s.bookingPulseInner} />
+              </View>
+              <View style={s.bookingInfo}>
+                <Text style={s.bookingTitle}>RDV en cours</Text>
+                <Text style={s.bookingSub}>
+                  {upcomingBooking.artisan.firstName}{" "}
+                  {upcomingBooking.artisan.lastName} · {upcomingBooking.service}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={brand.white} />
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {/* MAP */}
+        <View style={s.mapBlock}>
+          <MapView
+            ref={mapRef}
+            style={s.map}
+            provider={PROVIDER_DEFAULT}
+            initialRegion={initialRegion}
+            showsUserLocation={!!userLocation}
+            showsMyLocationButton={false}
+            showsCompass={false}
+            toolbarEnabled={false}
           >
-            <View style={s.searchIcon}>
-              <Ionicons name="search" size={18} color={brand.primary500} />
-            </View>
-            <Text style={s.searchTxt}>Quel artisan cherchez-vous ?</Text>
-          </Pressable>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(150).duration(400)}>
-          <View style={s.secHead}>
-            <View style={s.secHeadL}>
-              <View style={s.redDot} />
-              <Text style={s.secTitle}>Urgences 24/7</Text>
-            </View>
-            <Text style={s.secCap}>Intervention rapide</Text>
-          </View>
-
-          <View style={s.urgGrid}>
-            {urgent.map((svc) => (
-              <Pressable
-                key={svc.id}
-                style={({ pressed }) => [pressed && s.cardP]}
-                onPress={() => tap(svc)}
-                accessibilityRole="button"
-              >
-                <LinearGradient
-                  colors={svc.colors}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={s.urgCard}
+            {geoArtisans.map((a) => {
+              if (!a.latitude || !a.longitude) return null;
+              const cat = getCategory(a.categoryId);
+              const isSelected = a.id === selectedArtisanId;
+              return (
+                <Marker
+                  key={a.id}
+                  coordinate={{ latitude: a.latitude, longitude: a.longitude }}
+                  onPress={() => tapArtisanMarker(a.id)}
+                  tracksViewChanges={false}
+                  anchor={{ x: 0.5, y: 0.5 }}
                 >
-                  <Ionicons name={svc.icon} size={28} color="rgba(255,255,255,0.9)" />
-                  <View style={s.urgTxt}>
-                    <Text style={s.urgName}>{svc.name}</Text>
-                    <Text style={s.urgSub}>{svc.sub}</Text>
+                  <View
+                    style={[
+                      s.pin,
+                      isSelected && s.pinSelected,
+                      { backgroundColor: cat?.iconColor ?? brand.primary500 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={cat?.icon ?? "construct"}
+                      size={isSelected ? 16 : 14}
+                      color={brand.white}
+                    />
                   </View>
-                  <View style={s.urgBadge}>
-                    <Text style={s.urgBadgeTxt}>24/7</Text>
-                  </View>
-                </LinearGradient>
-              </Pressable>
-            ))}
-          </View>
-        </Animated.View>
+                </Marker>
+              );
+            })}
+          </MapView>
 
-        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-          <View style={s.secHead}>
-            <Text style={s.secTitle}>Tous les services</Text>
+          <Pressable
+            style={({ pressed }) => [s.mapCenterBtn, pressed && s.op]}
+            onPress={centerOnUser}
+          >
+            <Ionicons name="locate" size={18} color={brand.primary500} />
+          </Pressable>
+
+          <View style={s.mapBadge}>
+            <View style={s.mapBadgeDot} />
+            <Text style={s.mapBadgeTxt}>
+              {availableNowCount} dispos maintenant
+            </Text>
           </View>
 
-          <View style={s.grid}>
-            {other.map((svc) => (
+          {selectedArtisan && (
+            <Animated.View entering={FadeInDown.duration(200)} style={s.miniCard}>
               <Pressable
-                key={svc.id}
-                style={({ pressed }) => [s.gCard, pressed && s.cardP]}
-                onPress={() => tap(svc)}
-                accessibilityRole="button"
+                style={({ pressed }) => [s.miniCardInner, pressed && s.op]}
+                onPress={() => openArtisan(selectedArtisan.id)}
               >
-                <View style={[s.gIcon, { backgroundColor: svc.colors[0] }]}>
-                  <Ionicons name={svc.icon} size={24} color={svc.iconColor} />
+                <View
+                  style={[
+                    s.miniAvatar,
+                    {
+                      backgroundColor:
+                        getCategory(selectedArtisan.categoryId)?.iconColor ?? brand.primary500,
+                    },
+                  ]}
+                >
+                  <Text style={s.miniAvatarTxt}>{selectedArtisan.initials}</Text>
                 </View>
-                <Text style={s.gName}>{svc.name}</Text>
-                <Text style={s.gSub}>{svc.sub}</Text>
+                <View style={s.miniInfo}>
+                  <View style={s.miniNameRow}>
+                    <Text style={s.miniName}>
+                      {selectedArtisan.firstName}{" "}
+                      {selectedArtisan.lastName.charAt(0)}.
+                    </Text>
+                    {selectedArtisan.verified && (
+                      <Ionicons
+                        name="shield-checkmark"
+                        size={12}
+                        color={brand.primary500}
+                      />
+                    )}
+                  </View>
+                  <View style={s.miniMeta}>
+                    <Ionicons name="star" size={11} color="#F59E0B" />
+                    <Text style={s.miniMetaTxt}>
+                      {selectedArtisan.rating} · {selectedArtisan.distance} km
+                    </Text>
+                  </View>
+                  <View style={s.miniAvail}>
+                    <View
+                      style={[
+                        s.dot,
+                        {
+                          backgroundColor:
+                            availabilityColor[selectedArtisan.availability],
+                        },
+                      ]}
+                    />
+                    <Text style={s.miniAvailTxt}>
+                      {availabilityLabel[selectedArtisan.availability]}
+                    </Text>
+                  </View>
+                </View>
+                <View style={s.miniArrow}>
+                  <Ionicons name="chevron-forward" size={16} color={brand.white} />
+                </View>
               </Pressable>
-            ))}
-          </View>
-        </Animated.View>
+              <Pressable
+                onPress={() => setSelectedArtisanId(null)}
+                style={s.miniClose}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={14} color={brand.gray600} />
+              </Pressable>
+            </Animated.View>
+          )}
+        </View>
 
-        <View style={s.sig}>
-          <View style={s.sigL} />
+        {/* CTA principal: voir toutes les prestations */}
+        <Pressable
+          onPress={openPrestations}
+          style={({ pressed }) => [s.cta, pressed && s.cardP]}
+        >
+          <View style={s.ctaIconBox}>
+            <Ionicons name="grid" size={20} color={brand.white} />
+          </View>
+          <View style={s.ctaText}>
+            <Text style={s.ctaTitle}>Voir nos prestations</Text>
+            <Text style={s.ctaSub}>
+              10 services · {geoArtisans.length} artisans certifiés
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={brand.primary500} />
+        </Pressable>
+
+        {/* TRUST */}
+        <View style={s.trust}>
           <Ionicons name="shield-checkmark" size={13} color={brand.gold500} />
-          <Text style={s.sigT}>Artisans vérifiés</Text>
-          <View style={s.sigL} />
+          <Text style={s.trustTxt}>Tous les artisans Najda sont vérifiés et assurés</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -179,120 +439,233 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: brand.gray100,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  hLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: brand.primary500,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  hName: { ...T.xl, fontWeight: "700", color: brand.gray900, letterSpacing: -0.6 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  op: { opacity: 0.7 },
   avatar: {
-    width: comp.avatarSm,
-    height: comp.avatarSm,
+    width: comp.avatarMd,
+    height: comp.avatarMd,
     borderRadius: radius.full,
     backgroundColor: brand.primary500,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarTxt: { fontSize: 15, fontWeight: "700", color: brand.white },
-  op: { opacity: 0.7 },
+  avatarImg: {
+    width: comp.avatarMd,
+    height: comp.avatarMd,
+    borderRadius: radius.full,
+    backgroundColor: brand.gray200,
+  },
+  avatarTxt: { fontSize: 17, fontWeight: "700", color: brand.white },
+  hello: { ...T.base, fontWeight: "700", color: brand.gray900, letterSpacing: -0.3 },
+  cityRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
+  cityTxt: { ...T.xs, color: brand.gray600, fontWeight: "500" },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    backgroundColor: brand.gray50,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  notifDot: {
+    position: "absolute",
+    top: 9,
+    right: 11,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: brand.danger500,
+    borderWidth: 1.5,
+    borderColor: brand.gray50,
+  },
 
-  scroll: { padding: space.lg, paddingTop: space.md },
+  scroll: { paddingBottom: space["2xl"] },
 
-  search: {
+  bookingWidget: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    height: 56,
-    backgroundColor: brand.white,
-    borderRadius: radius.xl,
-    paddingHorizontal: space.md,
-    marginBottom: space.xl,
-    ...shadow.md,
+    margin: space.lg,
+    marginBottom: 0,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: brand.primary500,
+    ...shadow.lg,
   },
-  searchP: { transform: [{ scale: 0.99 }], opacity: 0.9 },
-  searchIcon: {
-    width: 38,
-    height: 38,
+  bookingPulse: {
+    width: 36,
+    height: 36,
     borderRadius: radius.full,
-    backgroundColor: brand.primary50,
+    backgroundColor: "rgba(255,255,255,0.22)",
     justifyContent: "center",
     alignItems: "center",
   },
-  searchTxt: { ...T.base, color: brand.gray400, flex: 1 },
+  bookingPulseInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#22C55E",
+  },
+  bookingInfo: { flex: 1, gap: 2 },
+  bookingTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.85)",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  bookingSub: { ...T.base, fontWeight: "700", color: brand.white },
 
-  secHead: {
+  mapBlock: {
+    height: 380,
+    margin: space.lg,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    backgroundColor: brand.gray100,
+    position: "relative",
+    ...shadow.md,
+  },
+  map: { ...StyleSheet.absoluteFillObject },
+  mapCenterBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    backgroundColor: brand.white,
+    justifyContent: "center",
+    alignItems: "center",
+    ...shadow.md,
+  },
+  mapBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: space.md,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: brand.white,
+    borderRadius: radius.full,
+    ...shadow.sm,
   },
-  secHeadL: { flexDirection: "row", alignItems: "center", gap: 8 },
-  secTitle: { ...T.lg, fontWeight: "700", color: brand.gray900, letterSpacing: -0.3 },
-  secCap: { ...T.xs, color: brand.gray400, fontWeight: "500" },
-  redDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: brand.danger500 },
+  mapBadgeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22C55E" },
+  mapBadgeTxt: { ...T.xs, fontWeight: "700", color: brand.gray800 },
 
-  urgGrid: { gap: 10, marginBottom: space.xl },
-  urgCard: {
+  pin: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: brand.white,
+    ...Platform.select({
+      ios: {
+        shadowColor: brand.black,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  pinSelected: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderColor: brand.gold500,
+    borderWidth: 3,
+  },
+
+  miniCard: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    right: 12,
+    backgroundColor: brand.white,
+    borderRadius: radius.lg,
+    padding: 10,
+    ...shadow.lg,
+  },
+  miniCardInner: { flexDirection: "row", alignItems: "center", gap: 12 },
+  miniAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.lg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  miniAvatarTxt: { fontSize: 15, fontWeight: "700", color: brand.white },
+  miniInfo: { flex: 1, gap: 2 },
+  miniNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  miniName: { ...T.sm, fontWeight: "700", color: brand.gray900 },
+  miniMeta: { flexDirection: "row", alignItems: "center", gap: 4 },
+  miniMetaTxt: { ...T.xs, color: brand.gray500, fontWeight: "500" },
+  miniAvail: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  miniAvailTxt: { ...T.xs, fontWeight: "600", color: brand.gray700 },
+  miniArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: brand.primary500,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  miniClose: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: brand.gray100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  cta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    padding: 16,
-    borderRadius: radius.xl,
-    minHeight: 76,
-  },
-  urgTxt: { flex: 1 },
-  urgName: { fontSize: 16, fontWeight: "700", color: brand.white, letterSpacing: -0.3 },
-  urgSub: { fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 2 },
-  urgBadge: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-  },
-  urgBadgeTxt: { fontSize: 11, fontWeight: "700", color: brand.white },
-  cardP: { opacity: 0.85, transform: [{ scale: 0.98 }] },
-
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: space.xl,
-  },
-  gCard: {
-    flexBasis: "47%",
-    flexGrow: 1,
+    marginHorizontal: space.lg,
+    padding: space.md,
     backgroundColor: brand.white,
     borderRadius: radius.lg,
-    padding: space.md,
-    ...shadow.sm,
+    borderWidth: 1.5,
+    borderColor: brand.primary100,
+    ...shadow.md,
   },
-  gIcon: {
+  cardP: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+  ctaIconBox: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: radius.lg,
+    backgroundColor: brand.primary500,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: space.md,
   },
-  gName: {
+  ctaText: { flex: 1, gap: 2 },
+  ctaTitle: {
     ...T.base,
-    fontWeight: "600",
+    fontWeight: "700",
     color: brand.gray900,
-    letterSpacing: -0.2,
-    marginBottom: 4,
+    letterSpacing: -0.3,
   },
-  gSub: { ...T.xs, color: brand.gray500 },
+  ctaSub: { ...T.xs, color: brand.gray500, fontWeight: "500" },
 
-  sig: {
+  trust: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: space.lg,
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: space.lg,
+    paddingHorizontal: space.lg,
   },
-  sigL: { flex: 1, height: 1, backgroundColor: brand.gray200 },
-  sigT: { ...T.xs, fontWeight: "500", color: brand.gray400 },
+  trustTxt: { ...T.xs, color: brand.gray500, fontWeight: "500" },
 });

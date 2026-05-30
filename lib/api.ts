@@ -28,6 +28,9 @@ type DbArtisan = {
   insured: boolean;
   bio: string | null;
   services: string[];
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
 };
 
@@ -83,6 +86,9 @@ export type Artisan = {
   insured: boolean;
   bio: string;
   services: string[];
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 export type Review = {
@@ -158,7 +164,19 @@ function mapArtisan(db: DbArtisan): Artisan {
     insured: db.insured,
     bio: db.bio ?? "",
     services: db.services,
+    city: db.city ?? null,
+    latitude: db.latitude != null ? Number(db.latitude) : null,
+    longitude: db.longitude != null ? Number(db.longitude) : null,
   };
+}
+
+export async function getAllArtisans(): Promise<Artisan[]> {
+  const { data, error } = await supabase
+    .from("artisans")
+    .select("*")
+    .order("rating", { ascending: false });
+  if (error) throw error;
+  return (data as DbArtisan[]).map(mapArtisan);
 }
 
 function relativeDate(iso: string): string {
@@ -209,13 +227,18 @@ function mapBooking(
 
 export async function getArtisansByCategory(
   categoryId: string,
+  filters?: { service?: string },
 ): Promise<Artisan[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("artisans")
     .select("*")
-    .eq("category_id", categoryId)
-    .order("rating", { ascending: false });
+    .eq("category_id", categoryId);
 
+  if (filters?.service) {
+    query = query.contains("services", [filters.service]);
+  }
+
+  const { data, error } = await query.order("rating", { ascending: false });
   if (error) throw error;
   return (data as DbArtisan[]).map(mapArtisan);
 }
@@ -230,6 +253,18 @@ export async function getArtisan(id: string): Promise<Artisan | null> {
   if (error) throw error;
   if (!data) return null;
   return mapArtisan(data as DbArtisan);
+}
+
+export async function getTopArtisans(limit: number = 6): Promise<Artisan[]> {
+  const { data, error } = await supabase
+    .from("artisans")
+    .select("*")
+    .eq("verified", true)
+    .order("rating", { ascending: false })
+    .order("review_count", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data as DbArtisan[]).map(mapArtisan);
 }
 
 export async function getArtisanReviews(artisanId: string): Promise<Review[]> {
@@ -428,6 +463,161 @@ export async function updateMyProfile(input: {
 }
 
 // =========================
+// Messagerie
+// =========================
+
+type DbConversation = {
+  id: string;
+  booking_id: string;
+  user_id: string;
+  artisan_id: string;
+  last_message_text: string | null;
+  last_message_at: string | null;
+  user_unread_count: number;
+  created_at: string;
+};
+
+type DbMessage = {
+  id: string;
+  conversation_id: string;
+  sender_type: "user" | "artisan" | "system";
+  text: string;
+  created_at: string;
+};
+
+export type Conversation = {
+  id: string;
+  bookingId: string;
+  artisanId: string;
+  artisan: Artisan | null;
+  lastMessageText: string;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  createdAt: string;
+};
+
+export type Message = {
+  id: string;
+  conversationId: string;
+  senderType: "user" | "artisan" | "system";
+  text: string;
+  createdAt: string;
+};
+
+function mapConversation(
+  db: DbConversation & { artisan?: DbArtisan | null },
+): Conversation {
+  return {
+    id: db.id,
+    bookingId: db.booking_id,
+    artisanId: db.artisan_id,
+    artisan: db.artisan ? mapArtisan(db.artisan) : null,
+    lastMessageText: db.last_message_text ?? "",
+    lastMessageAt: db.last_message_at,
+    unreadCount: db.user_unread_count,
+    createdAt: db.created_at,
+  };
+}
+
+function mapMessage(db: DbMessage): Message {
+  return {
+    id: db.id,
+    conversationId: db.conversation_id,
+    senderType: db.sender_type,
+    text: db.text,
+    createdAt: db.created_at,
+  };
+}
+
+export async function getMyConversations(): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*, artisan:artisans(*)")
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data as (DbConversation & { artisan: DbArtisan | null })[]).map(
+    mapConversation,
+  );
+}
+
+export async function getConversation(id: string): Promise<Conversation | null> {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*, artisan:artisans(*)")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return mapConversation(data as DbConversation & { artisan: DbArtisan | null });
+}
+
+export async function getMessages(conversationId: string): Promise<Message[]> {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data as DbMessage[]).map(mapMessage);
+}
+
+export async function sendMessage(
+  conversationId: string,
+  text: string,
+): Promise<Message> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Message vide.");
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      sender_type: "user",
+      text: trimmed,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapMessage(data as DbMessage);
+}
+
+export async function markConversationRead(conversationId: string): Promise<void> {
+  const { error } = await supabase
+    .from("conversations")
+    .update({ user_unread_count: 0 })
+    .eq("id", conversationId);
+  if (error) throw error;
+}
+
+/**
+ * S'abonne aux nouveaux messages d'une conversation en temps réel.
+ * Retourne la fonction de nettoyage à appeler dans le cleanup useEffect.
+ */
+export function subscribeToConversation(
+  conversationId: string,
+  onNewMessage: (msg: Message) => void,
+): () => void {
+  const channel = supabase
+    .channel(`messages:${conversationId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      (payload) => {
+        onNewMessage(mapMessage(payload.new as DbMessage));
+      },
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// =========================
 // Avatar (Storage)
 // =========================
 
@@ -495,33 +685,65 @@ export async function deleteAvatar(): Promise<void> {
 // API Search
 // =========================
 
-export async function searchArtisans(query: string): Promise<Artisan[]> {
-  const q = query.trim();
-  if (q.length < 2) return [];
+export type SearchFilters = {
+  query?: string;
+  categoryId?: string;
+  availableNow?: boolean;
+  verifiedOnly?: boolean;
+  topRated?: boolean;
+};
 
-  // Recherche dans first_name, last_name, bio, services et category_id
-  const pattern = `%${q.toLowerCase()}%`;
+export async function searchArtisans(filters: SearchFilters = {}): Promise<Artisan[]> {
+  let req = supabase.from("artisans").select("*");
 
-  const { data, error } = await supabase
-    .from("artisans")
-    .select("*")
-    .or(
+  // Filtre catégorie
+  if (filters.categoryId) {
+    req = req.eq("category_id", filters.categoryId);
+  }
+
+  // Filtre vérifié
+  if (filters.verifiedOnly) {
+    req = req.eq("verified", true);
+  }
+
+  // Filtre dispo maintenant (now ou today)
+  if (filters.availableNow) {
+    req = req.in("availability", ["now", "today"]);
+  }
+
+  // Top rated (note >= 4.7)
+  if (filters.topRated) {
+    req = req.gte("rating", 4.7);
+  }
+
+  // Recherche libre
+  const q = filters.query?.trim() ?? "";
+  if (q.length >= 2) {
+    const pattern = `%${q.toLowerCase()}%`;
+    req = req.or(
       `first_name.ilike.${pattern},last_name.ilike.${pattern},bio.ilike.${pattern},category_id.ilike.${pattern}`,
-    )
-    .order("rating", { ascending: false })
-    .limit(20);
+    );
+  }
 
+  req = req.order("rating", { ascending: false }).limit(50);
+
+  const { data, error } = await req;
   if (error) throw error;
 
-  // Filtrage supplémentaire côté client pour les services (PostgreSQL array)
   let results = (data as DbArtisan[]).map(mapArtisan);
-  const lowerQ = q.toLowerCase();
-  const extraMatches = results.filter((a) =>
-    a.services.some((s) => s.toLowerCase().includes(lowerQ)),
-  );
-  // Fusionne (déjà dans results) — pas de doublon ici car même source
-  if (extraMatches.length > 0 && results.length === 0) {
-    results = extraMatches;
+
+  // Filtrage supplémentaire côté client pour les services (PostgreSQL array)
+  if (q.length >= 2) {
+    const lowerQ = q.toLowerCase();
+    // Inclure les artisans qui matchent par service même si pas dans la requête principale
+    const all = results;
+    const serviceMatches = all.filter((a) =>
+      a.services.some((sv) => sv.toLowerCase().includes(lowerQ)),
+    );
+    if (serviceMatches.length > 0) {
+      const ids = new Set(results.map((r) => r.id));
+      for (const m of serviceMatches) if (!ids.has(m.id)) results.push(m);
+    }
   }
 
   return results;

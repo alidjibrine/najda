@@ -85,6 +85,14 @@ export default function AppLayout() {
         name="search"
         options={{ animation: "slide_from_bottom" }}
       />
+      <Stack.Screen
+        name="prestations"
+        options={{ animation: "slide_from_right" }}
+      />
+      <Stack.Screen
+        name="conversation/[id]"
+        options={{ animation: "slide_from_right" }}
+      />
     </Stack>
   );
 }

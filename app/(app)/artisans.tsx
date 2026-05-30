@@ -31,9 +31,10 @@ const FILTERS: { key: Filter; label: string }[] = [
 
 export default function ArtisansScreen() {
   const router = useRouter();
-  const { category, categoryName } = useLocalSearchParams<{
+  const { category, categoryName, service } = useLocalSearchParams<{
     category: string;
     categoryName: string;
+    service?: string;
   }>();
   const [filter, setFilter] = useState<Filter>("all");
   const [artisans, setArtisans] = useState<Artisan[]>([]);
@@ -45,7 +46,7 @@ export default function ArtisansScreen() {
     setLoading(true);
     setError(null);
 
-    getArtisansByCategory(category)
+    getArtisansByCategory(category, service ? { service } : undefined)
       .then((list) => {
         if (mounted) setArtisans(list);
       })
@@ -59,7 +60,7 @@ export default function ArtisansScreen() {
     return () => {
       mounted = false;
     };
-  }, [category]);
+  }, [category, service]);
 
   const filtered = useMemo(() => {
     let list = [...artisans];
@@ -164,7 +165,10 @@ export default function ArtisansScreen() {
         >
           <Ionicons name="arrow-back" size={22} color={brand.gray800} />
         </Pressable>
-        <Text style={s.headerTitle}>{categoryName ?? "Artisans"}</Text>
+        <View style={s.headerCenter}>
+          <Text style={s.headerTitle}>{categoryName ?? "Artisans"}</Text>
+          {service && <Text style={s.headerSub}>{service}</Text>}
+        </View>
         <View style={s.backBtn} />
       </View>
 
@@ -254,11 +258,17 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   op: { opacity: 0.6 },
+  headerCenter: { alignItems: "center", gap: 2 },
   headerTitle: {
     ...T.lg,
     fontWeight: "700",
     color: brand.gray900,
     letterSpacing: -0.3,
+  },
+  headerSub: {
+    ...T.xs,
+    fontWeight: "600",
+    color: brand.primary500,
   },
 
   filterRow: {
