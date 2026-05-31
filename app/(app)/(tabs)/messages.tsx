@@ -1,7 +1,5 @@
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,9 +11,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import { brand, space, radius, shadow, text as T } from "@/constants/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import {
+  space,
+  radius,
+  text as T,
+  najdaGradient,
+  najdaGradientDirection,
+} from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 import { getMyConversations, type Conversation } from "@/lib/api";
+import { Avatar } from "@/components/Avatar";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "";
@@ -34,6 +41,7 @@ function timeAgo(iso: string | null): string {
 
 export default function MessagesScreen() {
   const router = useRouter();
+  const t = useTheme();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,13 +74,25 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
+  const totalUnread = conversations.reduce(
+    (sum, c) => sum + c.unreadCount,
+    0,
+  );
+
   return (
-    <SafeAreaView style={s.safe} edges={["top"]}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
+      {/* ===== HEADER ===== */}
       <View style={s.header}>
-        <Text style={s.title}>Messages</Text>
-        <Text style={s.subtitle}>Échangez avec vos artisans en direct</Text>
+        <View>
+          <Text style={[s.title, { color: t.text }]}>Messages</Text>
+          <Text style={[s.subtitle, { color: t.textSecondary }]}>
+            {totalUnread > 0
+              ? `${totalUnread} non lu${totalUnread > 1 ? "s" : ""}`
+              : "Vos conversations en direct"}
+          </Text>
+        </View>
       </View>
 
       <ScrollView
@@ -82,195 +102,178 @@ export default function MessagesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={brand.primary500}
+            tintColor={t.primary}
           />
         }
       >
         {loading ? (
-          <View style={s.loader}>
-            <ActivityIndicator size="large" color={brand.primary500} />
-          </View>
+          <LoadingBlock t={t} />
         ) : conversations.length === 0 ? (
-          <Animated.View entering={FadeInDown.duration(400)} style={s.empty}>
-            <View style={s.emptyIconCircle}>
+          <Animated.View
+            entering={FadeIn.duration(400)}
+            style={s.emptyBlock}
+          >
+            <View
+              style={[s.emptyIcon, { backgroundColor: t.primaryMuted }]}
+            >
               <Ionicons
                 name="chatbubbles-outline"
-                size={32}
-                color={brand.primary400}
+                size={26}
+                color={t.primary}
               />
             </View>
-            <Text style={s.emptyTitle}>Aucune conversation</Text>
-            <Text style={s.emptySub}>
+            <Text style={[s.emptyTitle, { color: t.text }]}>
+              Aucune conversation
+            </Text>
+            <Text style={[s.emptySub, { color: t.textSecondary }]}>
               Réservez un artisan et un canal de discussion s&apos;ouvrira
-              automatiquement ici.
+              automatiquement.
             </Text>
             <Pressable
-              style={({ pressed }) => [s.cta, pressed && s.ctaP]}
               onPress={() => router.push("/(app)/(tabs)")}
+              style={({ pressed }) => [s.emptyBtn, pressed && s.pressed]}
             >
-              <Ionicons name="search" size={18} color={brand.white} />
-              <Text style={s.ctaTxt}>Trouver un artisan</Text>
+              <LinearGradient
+                colors={najdaGradient as unknown as [string, string, ...string[]]}
+                start={najdaGradientDirection.start}
+                end={najdaGradientDirection.end}
+                style={s.emptyBtnInner}
+              >
+                <Text style={s.emptyBtnTxt}>Trouver un artisan</Text>
+              </LinearGradient>
             </Pressable>
           </Animated.View>
         ) : (
-          conversations.map((conv, idx) => (
-            <Animated.View
-              key={conv.id}
-              entering={FadeInDown.delay(idx * 50).duration(400)}
-            >
-              <Pressable
-                style={({ pressed }) => [s.row, pressed && s.rowP]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(app)/conversation/[id]",
-                    params: { id: conv.id },
-                  })
-                }
+          <>
+            {conversations.map((conv, idx) => (
+              <Animated.View
+                key={conv.id}
+                entering={FadeInDown.delay(idx * 50).duration(300)}
               >
-                <View
-                  style={[
-                    s.avatar,
-                    {
-                      backgroundColor: brand.primary500,
-                    },
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(app)/conversation/[id]",
+                      params: { id: conv.id },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    s.row,
+                    { backgroundColor: t.surface, borderColor: t.border },
+                    pressed && s.pressed,
                   ]}
                 >
-                  <Text style={s.avatarTxt}>
-                    {conv.artisan?.initials ?? "?"}
-                  </Text>
-                </View>
+                  <Avatar
+                    uri={conv.artisan?.avatarUrl}
+                    initials={conv.artisan?.initials ?? "?"}
+                    size={52}
+                  />
 
-                <View style={s.info}>
-                  <View style={s.topRow}>
-                    <Text style={s.name} numberOfLines={1}>
-                      {conv.artisan
-                        ? `${conv.artisan.firstName} ${conv.artisan.lastName}`
-                        : "Artisan"}
-                    </Text>
-                    <Text style={s.time}>{timeAgo(conv.lastMessageAt)}</Text>
+                  <View style={s.info}>
+                    <View style={s.topRow}>
+                      <Text
+                        style={[s.name, { color: t.text }]}
+                        numberOfLines={1}
+                      >
+                        {conv.artisan
+                          ? `${conv.artisan.firstName} ${conv.artisan.lastName}`
+                          : "Artisan"}
+                      </Text>
+                      <Text style={[s.time, { color: t.textTertiary }]}>
+                        {timeAgo(conv.lastMessageAt)}
+                      </Text>
+                    </View>
+                    <View style={s.bottomRow}>
+                      <Text
+                        style={[
+                          s.preview,
+                          {
+                            color:
+                              conv.unreadCount > 0 ? t.text : t.textSecondary,
+                            fontWeight: conv.unreadCount > 0 ? "600" : "400",
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {conv.lastMessageText || "Nouvelle conversation"}
+                      </Text>
+                      {conv.unreadCount > 0 && (
+                        <View style={s.unreadBadgeWrap}>
+                          <LinearGradient
+                            colors={najdaGradient as unknown as [string, string, ...string[]]}
+                            start={najdaGradientDirection.start}
+                            end={najdaGradientDirection.end}
+                            style={s.unreadBadge}
+                          >
+                            <Text style={s.unreadTxt}>{conv.unreadCount}</Text>
+                          </LinearGradient>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                  <View style={s.bottomRow}>
-                    <Text
-                      style={[
-                        s.preview,
-                        conv.unreadCount > 0 && s.previewUnread,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {conv.lastMessageText || "Nouvelle conversation"}
-                    </Text>
-                    {conv.unreadCount > 0 && (
-                      <View style={s.unreadBadge}>
-                        <Text style={s.unreadTxt}>{conv.unreadCount}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </Pressable>
-            </Animated.View>
-          ))
-        )}
+                </Pressable>
+              </Animated.View>
+            ))}
 
-        {!loading && conversations.length > 0 && (
-          <View style={s.secureNote}>
-            <Ionicons name="lock-closed" size={12} color={brand.gray400} />
-            <Text style={s.secureTxt}>Messages chiffrés de bout en bout</Text>
-          </View>
+            <View style={s.secureNote}>
+              <Ionicons name="lock-closed" size={11} color={t.textTertiary} />
+              <Text style={[s.secureTxt, { color: t.textTertiary }]}>
+                Messages chiffrés de bout en bout
+              </Text>
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// =====================================================
+// Loading block
+// =====================================================
+function LoadingBlock({ t }: { t: ReturnType<typeof useTheme> }) {
+  return (
+    <Animated.View entering={FadeIn.duration(300)} style={s.loadingBlock}>
+      {[0, 1, 2, 3].map((i) => (
+        <View
+          key={i}
+          style={[
+            s.skeleton,
+            { backgroundColor: t.surfaceMuted, borderColor: t.border },
+          ]}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: brand.gray50 },
+  safe: { flex: 1 },
 
   header: {
     paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.lg,
-    backgroundColor: brand.white,
-    borderBottomWidth: 1,
-    borderBottomColor: brand.gray100,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
   },
   title: {
     fontSize: 28,
-    fontWeight: "700",
-    color: brand.gray900,
+    fontWeight: "800",
     letterSpacing: -0.8,
     marginBottom: 4,
   },
-  subtitle: { ...T.sm, color: brand.gray500 },
+  subtitle: { ...T.sm, fontWeight: "500" },
 
-  scroll: { padding: space.lg, minHeight: 400 },
+  scroll: { padding: space.lg, gap: 10, minHeight: 400 },
 
-  loader: { paddingVertical: 80, alignItems: "center" },
-
-  empty: {
-    backgroundColor: brand.white,
-    borderRadius: radius.xl,
-    padding: space.xl,
-    alignItems: "center",
-    gap: space.sm,
-    ...shadow.sm,
-  },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.full,
-    backgroundColor: brand.primary50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: space.sm,
-  },
-  emptyTitle: {
-    ...T.lg,
-    fontWeight: "700",
-    color: brand.gray900,
-    letterSpacing: -0.3,
-  },
-  emptySub: {
-    ...T.sm,
-    color: brand.gray500,
-    textAlign: "center",
-    lineHeight: 20,
-    maxWidth: 260,
-    marginBottom: space.md,
-  },
-  cta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: brand.primary500,
-    paddingHorizontal: 24,
-    height: 48,
-    borderRadius: radius.full,
-    ...shadow.lg,
-  },
-  ctaP: { opacity: 0.85, transform: [{ scale: 0.97 }] },
-  ctaTxt: { ...T.base, fontWeight: "600", color: brand.white },
-
+  // ===== ROW =====
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: brand.white,
-    borderRadius: radius.lg,
+    gap: 14,
     padding: 14,
-    marginBottom: 8,
-    ...shadow.sm,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  rowP: { opacity: 0.85, transform: [{ scale: 0.99 }] },
-
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.full,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarTxt: { fontSize: 16, fontWeight: "700", color: brand.white },
-
   info: { flex: 1, gap: 4 },
   topRow: {
     flexDirection: "row",
@@ -279,32 +282,36 @@ const s = StyleSheet.create({
     gap: 8,
   },
   name: {
-    ...T.base,
+    fontSize: 15,
     fontWeight: "700",
-    color: brand.gray900,
     flex: 1,
     letterSpacing: -0.2,
   },
-  time: { ...T.xs, color: brand.gray500, fontWeight: "500" },
+  time: { fontSize: 11, fontWeight: "500" },
   bottomRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  preview: { ...T.sm, color: brand.gray500, flex: 1 },
-  previewUnread: { color: brand.gray800, fontWeight: "600" },
+  preview: { ...T.sm, flex: 1 },
+
+  unreadBadgeWrap: {
+    borderRadius: 11,
+    overflow: "hidden",
+  },
   unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    borderRadius: 10,
-    backgroundColor: brand.primary500,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 7,
     justifyContent: "center",
     alignItems: "center",
   },
-  unreadTxt: { fontSize: 11, fontWeight: "700", color: brand.white },
+  unreadTxt: { fontSize: 11, fontWeight: "700", color: "#FFFFFF" },
 
+  pressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+
+  // ===== SECURE NOTE =====
   secureNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -312,5 +319,44 @@ const s = StyleSheet.create({
     gap: 6,
     paddingTop: space.lg,
   },
-  secureTxt: { ...T.xs, color: brand.gray400, fontWeight: "500" },
+  secureTxt: { fontSize: 11, fontWeight: "500" },
+
+  // ===== EMPTY =====
+  emptyBlock: {
+    alignItems: "center",
+    paddingVertical: 48,
+    paddingHorizontal: space.lg,
+    gap: 12,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    textAlign: "center",
+  },
+  emptySub: {
+    ...T.sm,
+    textAlign: "center",
+    maxWidth: 280,
+    lineHeight: 20,
+  },
+  emptyBtn: { marginTop: 12, borderRadius: radius.full },
+  emptyBtnInner: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: radius.full,
+  },
+  emptyBtnTxt: { ...T.sm, fontWeight: "700", color: "#FFFFFF" },
+
+  // ===== LOADING =====
+  loadingBlock: { gap: 10 },
+  skeleton: { height: 80, borderRadius: 16, borderWidth: 1 },
 });

@@ -13,12 +13,21 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import { brand, space, radius, shadow, comp, text as T } from "@/constants/theme";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import {
+  space,
+  radius,
+  shadow,
+  text as T,
+  najdaGradient,
+  najdaGradientDirection,
+} from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 import {
   getMyProfile,
   updateMyProfile,
@@ -29,6 +38,8 @@ import {
 
 export default function ProfileEditScreen() {
   const router = useRouter();
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [firstName, setFirstName] = useState("");
@@ -89,9 +100,11 @@ export default function ProfileEditScreen() {
         city,
         postalCode,
       });
-      Alert.alert("Profil mis à jour", "Vos informations ont été enregistrées.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        "Profil mis à jour",
+        "Vos informations ont été enregistrées.",
+        [{ text: "OK", onPress: () => router.back() }],
+      );
     } catch (e: unknown) {
       Alert.alert(
         "Erreur",
@@ -105,7 +118,10 @@ export default function ProfileEditScreen() {
   const pickFromLibrary = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Autorisation requise", "Najda a besoin d'accéder à votre galerie.");
+      Alert.alert(
+        "Autorisation requise",
+        "Najda a besoin d'accéder à votre galerie.",
+      );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -121,7 +137,10 @@ export default function ProfileEditScreen() {
   const pickFromCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Autorisation requise", "Najda a besoin d'accéder à votre appareil photo.");
+      Alert.alert(
+        "Autorisation requise",
+        "Najda a besoin d'accéder à votre appareil photo.",
+      );
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -166,7 +185,7 @@ export default function ProfileEditScreen() {
             } catch (e: unknown) {
               Alert.alert(
                 "Erreur",
-                e instanceof Error ? e.message : "Impossible de supprimer la photo.",
+                e instanceof Error ? e.message : "Impossible de supprimer.",
               );
             } finally {
               setPhotoBusy(false);
@@ -186,9 +205,13 @@ export default function ProfileEditScreen() {
         { text: "Prendre une photo", onPress: pickFromCamera },
         { text: "Choisir depuis la galerie", onPress: pickFromLibrary },
         ...(hasPhoto
-          ? ([
-              { text: "Supprimer la photo", style: "destructive" as const, onPress: doDelete },
-            ])
+          ? [
+              {
+                text: "Supprimer la photo",
+                style: "destructive" as const,
+                onPress: doDelete,
+              },
+            ]
           : []),
         { text: "Annuler", style: "cancel" as const },
       ],
@@ -199,358 +222,482 @@ export default function ProfileEditScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]}>
         <View style={s.loader}>
-          <ActivityIndicator size="large" color={brand.primary500} />
+          <ActivityIndicator size="large" color={t.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
-  const renderField = (
-    label: string,
-    value: string,
-    onChange: (v: string) => void,
-    name: string,
-    options: {
-      placeholder?: string;
-      keyboardType?: "default" | "phone-pad" | "numeric";
-      autoCapitalize?: "none" | "words" | "sentences";
-      ref?: React.RefObject<TextInput | null>;
-      onSubmit?: () => void;
-      returnKeyType?: "next" | "done";
-      required?: boolean;
-    } = {},
-  ) => (
-    <View style={s.fieldGroup}>
-      <View style={s.labelRow}>
-        <Text style={s.label}>{label}</Text>
-        {options.required && <Text style={s.required}>*</Text>}
-      </View>
-      <TextInput
-        ref={options.ref}
-        value={value}
-        onChangeText={onChange}
-        onFocus={() => setFocused(name)}
-        onBlur={() => setFocused(null)}
-        placeholder={options.placeholder}
-        placeholderTextColor={brand.gray400}
-        keyboardType={options.keyboardType}
-        autoCapitalize={options.autoCapitalize ?? "words"}
-        autoCorrect={false}
-        returnKeyType={options.returnKeyType ?? "next"}
-        onSubmitEditing={options.onSubmit}
-        style={[
-          s.input,
-          { borderColor: focused === name ? brand.primary400 : brand.gray200 },
-        ]}
-        editable={!submitting}
-      />
-    </View>
-  );
-
   return (
-    <SafeAreaView style={s.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <View style={[s.root, { backgroundColor: t.bg }]}>
+      <StatusBar barStyle="light-content" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={s.flex}
+        style={{ flex: 1 }}
       >
-        <View style={s.header}>
-          <Pressable
-            style={({ pressed }) => [s.backBtn, pressed && s.op]}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            hitSlop={12}
-          >
-            <Ionicons name="arrow-back" size={22} color={brand.gray800} />
-          </Pressable>
-          <Text style={s.hTitle}>Mes informations</Text>
-          <View style={s.backBtn} />
-        </View>
-
         <ScrollView
-          contentContainerStyle={s.scroll}
-          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Photo de profil */}
-          <Animated.View
-            entering={FadeInDown.delay(50).duration(400)}
-            style={s.photoBlock}
+          {/* ============= HERO DÉGRADÉ ============= */}
+          <LinearGradient
+            colors={najdaGradient as unknown as [string, string, ...string[]]}
+            start={najdaGradientDirection.start}
+            end={najdaGradientDirection.end}
+            style={[s.hero, { paddingTop: insets.top + 8 }]}
           >
-            <Pressable
-              onPress={openPhotoMenu}
-              disabled={photoBusy}
-              style={({ pressed }) => [s.avatarWrap, pressed && s.op]}
+            <View style={s.heroTop}>
+              <Pressable
+                onPress={() => router.back()}
+                hitSlop={12}
+                style={({ pressed }) => [s.heroBack, pressed && s.pressed]}
+              >
+                <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+              </Pressable>
+              <Text style={s.heroTitle}>Mes informations</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            {/* Avatar editable */}
+            <Animated.View
+              entering={FadeIn.delay(120).duration(450)}
+              style={s.avatarBlock}
             >
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={s.avatarImg} />
-              ) : (
-                <View style={s.avatarPlaceholder}>
-                  <Text style={s.avatarInitial}>{initial}</Text>
-                </View>
-              )}
-              <View style={s.cameraBtn}>
-                {photoBusy ? (
-                  <ActivityIndicator color={brand.white} size="small" />
+              <Pressable
+                onPress={openPhotoMenu}
+                disabled={photoBusy}
+                style={({ pressed }) => pressed && s.pressed}
+              >
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={s.avatarImg} />
                 ) : (
-                  <Ionicons
-                    name={avatarUrl ? "create" : "camera"}
-                    size={16}
-                    color={brand.white}
-                  />
+                  <View style={s.avatar}>
+                    <Text style={s.avatarTxt}>{initial}</Text>
+                  </View>
                 )}
-              </View>
-            </Pressable>
-            <Pressable onPress={openPhotoMenu} disabled={photoBusy} hitSlop={8}>
-              <Text style={s.photoLink}>
+                <View
+                  style={[
+                    s.avatarBadge,
+                    { backgroundColor: t.surface, borderColor: t.border },
+                  ]}
+                >
+                  {photoBusy ? (
+                    <ActivityIndicator size="small" color={t.primary} />
+                  ) : (
+                    <Ionicons
+                      name={avatarUrl ? "create-outline" : "camera-outline"}
+                      size={16}
+                      color={t.primary}
+                    />
+                  )}
+                </View>
+              </Pressable>
+              <Text style={s.avatarLabel}>
                 {avatarUrl ? "Modifier la photo" : "Ajouter une photo"}
               </Text>
-            </Pressable>
-          </Animated.View>
+            </Animated.View>
+          </LinearGradient>
 
-          <Animated.View entering={FadeInDown.delay(120).duration(400)}>
-            <Text style={s.sectionTitle}>Identité</Text>
-            <View style={s.fields}>
-              <View style={s.row}>
-                <View style={{ flex: 1 }}>
-                  {renderField("Prénom", firstName, setFirstName, "firstName", {
-                    placeholder: "Ali",
-                    required: true,
-                    onSubmit: () => lastNameRef.current?.focus(),
-                  })}
+          {/* ============= FORM ============= */}
+          <View style={s.content}>
+            {/* Identité */}
+            <Animated.View
+              entering={FadeInDown.delay(180).duration(400)}
+              style={s.section}
+            >
+              <Text style={[s.sectionLabel, { color: t.textSecondary }]}>
+                Identité
+              </Text>
+
+              <Field
+                label="Prénom"
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Ali"
+                returnKeyType="next"
+                onSubmitEditing={() => lastNameRef.current?.focus()}
+                autoCapitalize="words"
+                focused={focused === "firstName"}
+                onFocus={() => setFocused("firstName")}
+                onBlur={() => setFocused(null)}
+                t={t}
+                required
+              />
+
+              <Field
+                label="Nom"
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Djibrine"
+                ref={lastNameRef}
+                returnKeyType="next"
+                onSubmitEditing={() => phoneRef.current?.focus()}
+                autoCapitalize="words"
+                focused={focused === "lastName"}
+                onFocus={() => setFocused("lastName")}
+                onBlur={() => setFocused(null)}
+                t={t}
+                required
+              />
+            </Animated.View>
+
+            {/* Contact */}
+            <Animated.View
+              entering={FadeInDown.delay(240).duration(400)}
+              style={s.section}
+            >
+              <Text style={[s.sectionLabel, { color: t.textSecondary }]}>
+                Contact
+              </Text>
+
+              <Field
+                label="Téléphone"
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="06 12 34 56 78"
+                ref={phoneRef}
+                keyboardType="phone-pad"
+                returnKeyType="next"
+                onSubmitEditing={() => addressRef.current?.focus()}
+                focused={focused === "phone"}
+                onFocus={() => setFocused("phone")}
+                onBlur={() => setFocused(null)}
+                t={t}
+                required
+                icon="call-outline"
+              />
+            </Animated.View>
+
+            {/* Adresse */}
+            <Animated.View
+              entering={FadeInDown.delay(300).duration(400)}
+              style={s.section}
+            >
+              <Text style={[s.sectionLabel, { color: t.textSecondary }]}>
+                Adresse
+              </Text>
+
+              <Field
+                label="Adresse"
+                value={address}
+                onChangeText={setAddress}
+                placeholder="12 rue de la Paix"
+                ref={addressRef}
+                returnKeyType="next"
+                onSubmitEditing={() => postalRef.current?.focus()}
+                focused={focused === "address"}
+                onFocus={() => setFocused("address")}
+                onBlur={() => setFocused(null)}
+                t={t}
+                icon="location-outline"
+              />
+
+              <View style={s.row2}>
+                <View style={s.row2Item}>
+                  <Field
+                    label="Code postal"
+                    value={postalCode}
+                    onChangeText={setPostalCode}
+                    placeholder="75001"
+                    ref={postalRef}
+                    keyboardType="number-pad"
+                    maxLength={5}
+                    returnKeyType="next"
+                    onSubmitEditing={() => cityRef.current?.focus()}
+                    focused={focused === "postal"}
+                    onFocus={() => setFocused("postal")}
+                    onBlur={() => setFocused(null)}
+                    t={t}
+                  />
                 </View>
-                <View style={{ flex: 1 }}>
-                  {renderField("Nom", lastName, setLastName, "lastName", {
-                    placeholder: "Djibrine",
-                    required: true,
-                    ref: lastNameRef,
-                    onSubmit: () => phoneRef.current?.focus(),
-                  })}
+                <View style={[s.row2Item, { flex: 1.4 }]}>
+                  <Field
+                    label="Ville"
+                    value={city}
+                    onChangeText={setCity}
+                    placeholder="Paris"
+                    ref={cityRef}
+                    autoCapitalize="words"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSave}
+                    focused={focused === "city"}
+                    onFocus={() => setFocused("city")}
+                    onBlur={() => setFocused(null)}
+                    t={t}
+                    required
+                  />
                 </View>
               </View>
-
-              {renderField("Téléphone", phone, setPhone, "phone", {
-                placeholder: "06 12 34 56 78",
-                keyboardType: "phone-pad",
-                autoCapitalize: "none",
-                required: true,
-                ref: phoneRef,
-                onSubmit: () => addressRef.current?.focus(),
-              })}
-            </View>
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <Text style={s.sectionTitle}>Adresse</Text>
-            <View style={s.fields}>
-              {renderField("Adresse", address, setAddress, "address", {
-                placeholder: "24 rue de la République",
-                ref: addressRef,
-                onSubmit: () => postalRef.current?.focus(),
-              })}
-
-              <View style={s.row}>
-                <View style={{ flex: 1 }}>
-                  {renderField("Code postal", postalCode, setPostalCode, "postal", {
-                    placeholder: "69001",
-                    keyboardType: "numeric",
-                    autoCapitalize: "none",
-                    ref: postalRef,
-                    onSubmit: () => cityRef.current?.focus(),
-                  })}
-                </View>
-                <View style={{ flex: 2 }}>
-                  {renderField("Ville", city, setCity, "city", {
-                    placeholder: "Lyon",
-                    required: true,
-                    ref: cityRef,
-                    returnKeyType: "done",
-                    onSubmit: handleSave,
-                  })}
-                </View>
-              </View>
-            </View>
-          </Animated.View>
-
-          <Animated.View
-            entering={FadeInDown.delay(300).duration(400)}
-            style={s.privacy}
-          >
-            <Ionicons
-              name="lock-closed"
-              size={14}
-              color={brand.primary500}
-            />
-            <Text style={s.privacyTxt}>
-              Vos données sont privées et chiffrées. Elles ne sont partagées
-              qu&apos;avec les artisans avec qui vous avez un rendez-vous.
-            </Text>
-          </Animated.View>
+            </Animated.View>
+          </View>
         </ScrollView>
 
-        <View style={s.ctaBar}>
+        {/* ============= STICKY CTA ============= */}
+        <View
+          style={[
+            s.bottomBar,
+            {
+              backgroundColor: t.surface,
+              borderTopColor: t.border,
+              paddingBottom: insets.bottom + 12,
+            },
+          ]}
+        >
           <Pressable
-            style={({ pressed }) => [
-              s.cta,
-              submitting && s.ctaDisabled,
-              pressed && !submitting && s.ctaP,
-            ]}
             onPress={handleSave}
             disabled={submitting}
+            style={({ pressed }) => [
+              s.saveWrap,
+              submitting && { opacity: 0.6 },
+              pressed && !submitting && s.ctaPressed,
+            ]}
           >
-            {submitting ? (
-              <ActivityIndicator color={brand.white} />
-            ) : (
-              <Text style={s.ctaTxt}>Enregistrer les modifications</Text>
-            )}
+            <LinearGradient
+              colors={najdaGradient as unknown as [string, string, ...string[]]}
+              start={najdaGradientDirection.start}
+              end={najdaGradientDirection.end}
+              style={s.save}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                  <Text style={s.saveTxt}>Enregistrer</Text>
+                </>
+              )}
+            </LinearGradient>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
+// =====================================================
+// Field (input avec label + icône optionnelle)
+// =====================================================
+type FieldProps = {
+  label: string;
+  value: string;
+  onChangeText: (s: string) => void;
+  placeholder?: string;
+  keyboardType?: "default" | "phone-pad" | "number-pad" | "email-address";
+  returnKeyType?: "next" | "done";
+  onSubmitEditing?: () => void;
+  maxLength?: number;
+  autoCapitalize?: "none" | "words" | "sentences";
+  focused: boolean;
+  onFocus: () => void;
+  onBlur: () => void;
+  t: ReturnType<typeof useTheme>;
+  required?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
+};
+
+import { forwardRef } from "react";
+const Field = forwardRef<TextInput, FieldProps>(function Field(
+  {
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    keyboardType = "default",
+    returnKeyType,
+    onSubmitEditing,
+    maxLength,
+    autoCapitalize = "none",
+    focused,
+    onFocus,
+    onBlur,
+    t,
+    required,
+    icon,
+  },
+  ref,
+) {
+  return (
+    <View style={s.field}>
+      <Text style={[s.fieldLabel, { color: t.textSecondary }]}>
+        {label}
+        {required && <Text style={{ color: t.danger }}> *</Text>}
+      </Text>
+      <View
+        style={[
+          s.inputRow,
+          {
+            backgroundColor: t.surface,
+            borderColor: focused ? t.primary : t.border,
+            borderWidth: focused ? 1.5 : 1,
+          },
+        ]}
+      >
+        {icon && (
+          <Ionicons
+            name={icon}
+            size={17}
+            color={focused ? t.primary : t.textSecondary}
+            style={{ marginRight: 10 }}
+          />
+        )}
+        <TextInput
+          ref={ref}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={t.textTertiary}
+          keyboardType={keyboardType}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          maxLength={maxLength}
+          autoCapitalize={autoCapitalize}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          style={[s.input, { color: t.text }]}
+        />
+      </View>
+    </View>
+  );
+});
+
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: brand.gray50 },
-  flex: { flex: 1 },
+  root: { flex: 1 },
+  safe: { flex: 1 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  header: {
+  // ============= HERO =============
+  hero: {
+    paddingHorizontal: space.lg,
+    paddingBottom: space.xl + 8,
+    alignItems: "center",
+  },
+  heroTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    backgroundColor: brand.white,
-    borderBottomWidth: 1,
-    borderBottomColor: brand.gray100,
+    width: "100%",
+    marginBottom: space.lg,
   },
-  backBtn: {
+  heroBack: {
     width: 40,
     height: 40,
-    borderRadius: radius.full,
-    backgroundColor: brand.gray50,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
     justifyContent: "center",
     alignItems: "center",
   },
-  op: { opacity: 0.6 },
-  hTitle: { ...T.lg, fontWeight: "700", color: brand.gray900, letterSpacing: -0.3 },
-
-  scroll: { padding: space.lg, paddingBottom: 100 },
-
-  photoBlock: {
-    alignItems: "center",
-    gap: 12,
-    marginBottom: space.xl,
+  heroTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: -0.3,
   },
-  avatarWrap: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    ...shadow.md,
+
+  avatarBlock: { alignItems: "center", gap: 10 },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatarImg: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: brand.gray200,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.5)",
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
-  avatarPlaceholder: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: brand.primary500,
-    justifyContent: "center",
-    alignItems: "center",
+  avatarTxt: {
+    fontSize: 36,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: -1,
   },
-  avatarInitial: { fontSize: 40, fontWeight: "700", color: brand.white },
-  cameraBtn: {
+  avatarBadge: {
     position: "absolute",
-    right: 0,
-    bottom: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: brand.primary500,
+    bottom: -2,
+    right: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    borderWidth: 2,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
-    borderColor: brand.gray50,
-  },
-  photoLink: {
-    ...T.sm,
-    fontWeight: "600",
-    color: brand.primary500,
-  },
-
-  sectionTitle: {
-    ...T.xs,
-    fontWeight: "700",
-    color: brand.gray500,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    marginBottom: space.sm,
-    marginTop: space.md,
-  },
-
-  fields: {
-    gap: space.md,
-    marginBottom: space.lg,
-    backgroundColor: brand.white,
-    borderRadius: radius.lg,
-    padding: space.md,
     ...shadow.sm,
   },
-  row: { flexDirection: "row", gap: 12 },
-  fieldGroup: { gap: 8 },
-  labelRow: { flexDirection: "row", gap: 4, alignItems: "center" },
-  label: { ...T.sm, fontWeight: "600", color: brand.gray700 },
-  required: { ...T.sm, color: brand.danger500 },
-  input: {
-    height: comp.inputHeight,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    backgroundColor: brand.gray50,
-    paddingHorizontal: 16,
-    ...T.base,
-    color: brand.gray900,
+  avatarLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.95)",
+    letterSpacing: 0.2,
   },
 
-  privacy: {
+  // ============= CONTENT =============
+  content: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.lg },
+
+  section: { gap: 10 },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 2,
+    marginLeft: 4,
+  },
+
+  // ============= FIELD =============
+  field: { gap: 6 },
+  fieldLabel: { fontSize: 13, fontWeight: "600" },
+  inputRow: {
     flexDirection: "row",
-    gap: 8,
-    alignItems: "flex-start",
-    backgroundColor: brand.primary50,
-    padding: space.md,
-    borderRadius: radius.md,
-    marginTop: space.md,
+    alignItems: "center",
+    height: 52,
+    borderRadius: 14,
+    paddingHorizontal: 14,
   },
-  privacyTxt: {
+  input: {
     flex: 1,
-    ...T.xs,
-    color: brand.primary700,
-    lineHeight: 18,
+    fontSize: 15,
+    fontWeight: "500",
+    paddingVertical: 0,
   },
 
-  ctaBar: {
+  row2: { flexDirection: "row", gap: 10 },
+  row2Item: { flex: 1 },
+
+  // ============= BOTTOM =============
+  bottomBar: {
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    backgroundColor: brand.white,
-    borderTopWidth: 1,
-    borderTopColor: brand.gray100,
+    paddingTop: 12,
+    borderTopWidth: 0.5,
   },
-  cta: {
-    height: comp.buttonHeight,
-    borderRadius: radius.md,
-    backgroundColor: brand.primary500,
-    justifyContent: "center",
+  saveWrap: { borderRadius: 16, ...shadow.lg },
+  save: {
+    flexDirection: "row",
     alignItems: "center",
-    ...shadow.lg,
+    justifyContent: "center",
+    gap: 8,
+    height: 54,
+    borderRadius: 16,
   },
-  ctaDisabled: { backgroundColor: brand.gray400 },
-  ctaP: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-  ctaTxt: { ...T.base, fontWeight: "700", color: brand.white },
+  saveTxt: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
+  },
+
+  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  ctaPressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
 });

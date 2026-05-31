@@ -1,11 +1,10 @@
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme, useIsDark } from "@/hooks/useTheme";
+import { useTheme } from "@/hooks/useTheme";
 
-export default function TabsLayout() {
+export default function ProTabsLayout() {
   const t = useTheme();
-  const isDark = useIsDark();
 
   return (
     <Tabs
@@ -21,16 +20,15 @@ export default function TabsLayout() {
           },
         ],
         tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="dashboard"
         options={{
-          title: "Accueil",
+          title: "Activité",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              name={focused ? "home" : "home-outline"}
+              name={focused ? "grid" : "grid-outline"}
               color={color}
               focused={focused}
               primary={t.primary}
@@ -39,26 +37,26 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="bookings"
+        name="requests"
         options={{
-          title: "Rendez-vous",
+          title: "Demandes",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? "mail" : "mail-outline"}
+              color={color}
+              focused={focused}
+              primary={t.primary}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="planning"
+        options={{
+          title: "Planning",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name={focused ? "calendar" : "calendar-outline"}
-              color={color}
-              focused={focused}
-              primary={t.primary}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messages",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              name={focused ? "chatbubble" : "chatbubble-outline"}
               color={color}
               focused={focused}
               primary={t.primary}
@@ -84,9 +82,6 @@ export default function TabsLayout() {
   );
 }
 
-// =====================================================
-// Icône tab avec indicateur dot quand actif
-// =====================================================
 function TabIcon({
   name,
   color,
@@ -121,13 +116,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     letterSpacing: 0.1,
   },
-  tabItem: {
-    gap: 0,
-  },
-  iconWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  iconWrap: { alignItems: "center", justifyContent: "center" },
   dot: {
     position: "absolute",
     bottom: -8,

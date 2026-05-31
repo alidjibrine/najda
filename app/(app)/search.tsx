@@ -23,6 +23,7 @@ import {
   type SearchFilters,
 } from "@/lib/api";
 import { CATEGORIES, getCategory } from "@/constants/categories";
+import { AvatarSquare } from "@/components/Avatar";
 
 const POPULAR_SEARCHES = [
   "Plombier",
@@ -127,19 +128,16 @@ export default function SearchScreen() {
             })
           }
         >
-          <View
-            style={[
-              s.avatar,
-              {
-                backgroundColor:
-                  item.availability === "now" || item.availability === "today"
-                    ? brand.primary500
-                    : brand.gray400,
-              },
-            ]}
-          >
-            <Text style={s.avatarTxt}>{item.initials}</Text>
-          </View>
+          <AvatarSquare
+            uri={item.avatarUrl}
+            initials={item.initials}
+            size={50}
+            bgColor={
+              item.availability === "now" || item.availability === "today"
+                ? brand.primary500
+                : brand.gray400
+            }
+          />
 
           <View style={s.cardInfo}>
             <View style={s.nameRow}>

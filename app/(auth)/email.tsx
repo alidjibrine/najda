@@ -1,11 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { setMyRole, type UserRole } from "@/lib/api-extras";
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -14,14 +18,41 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { brand, space, radius, shadow, comp, text as T } from "@/constants/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import {
+  space,
+  radius,
+  shadow,
+  text as T,
+  najdaGradient,
+  najdaGradientDirection,
+} from "@/constants/theme";
+import { useTheme, useIsDark } from "@/hooks/useTheme";
+import { NajdaLogo } from "@/components/NajdaLogo";
 import { supabase } from "@/lib/supabase";
 
 type Mode = "signin" | "signup";
 
 export default function EmailAuthScreen() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("signup");
+  const t = useTheme();
+  const isDark = useIsDark();
+  const params = useLocalSearchParams<{ mode?: string; role?: string }>();
+
+  const initialMode: Mode = params.mode === "signin" ? "signin" : "signup";
+  const presetRole: UserRole | null =
+    params.role === "pro" ? "pro" : params.role === "client" ? "client" : null;
+
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -33,9 +64,54 @@ export default function EmailAuthScreen() {
 
   const isSignUp = mode === "signup";
 
-  const toggleMode = () => {
+  // ====== Tab slider animation ======
+  const [tabsWidth, setTabsWidth] = useState(0);
+  const tabX = useSharedValue(0); // 0 = signin (gauche), 1 = signup (droite)
+
+  useEffect(() => {
+    tabX.value = withSpring(isSignUp ? 1 : 0, {
+      damping: 18,
+      stiffness: 200,
+    });
+  }, [isSignUp, tabX]);
+
+  const tabIndicatorStyle = useAnimatedStyle(() => {
+    const halfWidth = (tabsWidth - 8) / 2;
+    return {
+      transform: [{ translateX: tabX.value * halfWidth }],
+      width: halfWidth,
+    };
+  });
+
+  // ====== Password strength (signup only) ======
+  const strength = useMemo(() => computeStrength(password), [password]);
+  const strengthAnim = useSharedValue(0);
+
+  useEffect(() => {
+    strengthAnim.value = withTiming(strength.score / 4, { duration: 300 });
+  }, [strength.score, strengthAnim]);
+
+  const strengthBarStyle = useAnimatedStyle(() => ({
+    width: `${strengthAnim.value * 100}%`,
+    backgroundColor:
+      strength.score >= 3
+        ? "#10B981"
+        : strength.score >= 2
+          ? "#F59E0B"
+          : strength.score >= 1
+            ? "#F87171"
+            : "transparent",
+  }));
+
+  // ====== Handlers ======
+  const haptic = (style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) => {
+    if (Platform.OS === "ios") Haptics.impactAsync(style);
+  };
+
+  const setModeAnd = (m: Mode) => {
+    haptic();
     setError(null);
-    setMode((m) => (m === "signup" ? "signin" : "signup"));
+    setMode(m);
   };
 
   const validate = (): string | null => {
@@ -50,6 +126,7 @@ export default function EmailAuthScreen() {
   };
 
   const handleSubmit = async () => {
+    haptic(Haptics.ImpactFeedbackStyle.Medium);
     const validationError = validate();
     if (validationError) {
       setError(validationError);
@@ -64,6 +141,16 @@ export default function EmailAuthScreen() {
           password,
         });
         if (e) throw e;
+        // Pré-enregistrer le rôle choisi à l'écran login
+        // (le routing évitera le passage par role-select)
+        if (presetRole) {
+          try {
+            await setMyRole(presetRole);
+          } catch {
+            // L'utilisateur devra valider son email avant. Le role sera
+            // appliqué au premier login via le fallback role-select.
+          }
+        }
         Alert.alert(
           "Vérifiez votre boîte mail",
           `Un email de confirmation a été envoyé à ${email.trim()}. Cliquez sur le lien pour activer votre compte.`,
@@ -77,6 +164,9 @@ export default function EmailAuthScreen() {
         if (e) throw e;
       }
     } catch (err: unknown) {
+      if (Platform.OS === "ios") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
       const message =
         err instanceof Error
           ? translateError(err.message)
@@ -88,11 +178,12 @@ export default function EmailAuthScreen() {
   };
 
   const handleForgotPassword = async () => {
+    haptic();
     const trimmed = email.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       Alert.alert(
         "Email requis",
-        "Saisissez d'abord votre adresse email dans le champ ci-dessus, puis appuyez à nouveau sur \"Mot de passe oublié\".",
+        "Saisissez d'abord votre adresse email, puis appuyez à nouveau sur \"Mot de passe oublié\".",
       );
       return;
     }
@@ -104,214 +195,417 @@ export default function EmailAuthScreen() {
         `Si un compte existe pour ${trimmed}, vous recevrez un lien pour réinitialiser votre mot de passe.`,
       );
     } catch {
-      Alert.alert(
-        "Erreur",
-        "Impossible d'envoyer l'email de réinitialisation. Réessayez.",
-      );
+      Alert.alert("Erreur", "Impossible d'envoyer l'email de réinitialisation. Réessayez.");
     }
   };
 
-  const emailBorder =
-    focused === "email"
-      ? brand.primary400
-      : error && !email.trim()
-        ? brand.danger500
-        : brand.gray200;
-
-  const passwordBorder =
-    focused === "password"
-      ? brand.primary400
-      : error && !password
-        ? brand.danger500
-        : brand.gray200;
-
   return (
-    <SafeAreaView style={s.container} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={s.flex}
-      >
-        <ScrollView
-          contentContainerStyle={s.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <View style={[s.root, { backgroundColor: t.bg }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent />
+
+      {/* Halo très doux — diffus, sans cercle visible */}
+      <View pointerEvents="none" style={s.haloWrap}>
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(155,181,255,0)", "rgba(168,155,255,0.12)", "rgba(197,139,236,0)"]
+              : ["rgba(155,181,255,0)", "rgba(168,155,255,0.14)", "rgba(197,139,236,0)"]
+          }
+          start={{ x: 0.2, y: 0.2 }}
+          end={{ x: 0.8, y: 0.8 }}
+          style={s.halo}
+        />
+      </View>
+
+      <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={s.flex}
         >
-          {/* Header */}
-          <View style={s.header}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Retour"
-              hitSlop={16}
-              onPress={() => router.back()}
-              style={({ pressed }) => [s.backBtn, pressed && s.pressed]}
-            >
-              <Ionicons name="arrow-back" size={22} color={brand.gray800} />
-            </Pressable>
-          </View>
-
-          {/* Titre */}
-          <Text style={s.title}>
-            {isSignUp ? "Créer votre compte" : "Content de vous revoir"}
-          </Text>
-          <Text style={s.subtitle}>
-            {isSignUp
-              ? "Rejoignez Najda pour accéder à des artisans vérifiés."
-              : "Connectez-vous pour retrouver vos artisans et rendez-vous."}
-          </Text>
-
-          {/* Champs */}
-          <View style={s.fields}>
-            <View style={s.fieldGroup}>
-              <Text style={s.label}>Adresse email</Text>
-              <TextInput
-                value={email}
-                onChangeText={(t) => {
-                  setEmail(t);
-                  if (error) setError(null);
-                }}
-                onFocus={() => setFocused("email")}
-                onBlur={() => setFocused(null)}
-                placeholder="vous@exemple.com"
-                placeholderTextColor={brand.gray400}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-                style={[s.input, { borderColor: emailBorder }]}
-                editable={!loading}
-              />
-            </View>
-
-            <View style={s.fieldGroup}>
-              <Text style={s.label}>Mot de passe</Text>
-              <View style={[s.inputRow, { borderColor: passwordBorder }]}>
-                <TextInput
-                  ref={passwordRef}
-                  value={password}
-                  onChangeText={(t) => {
-                    setPassword(t);
-                    if (error) setError(null);
-                  }}
-                  onFocus={() => setFocused("password")}
-                  onBlur={() => setFocused(null)}
-                  placeholder={
-                    isSignUp ? "Minimum 8 caractères" : "Votre mot de passe"
-                  }
-                  placeholderTextColor={brand.gray400}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete={
-                    isSignUp ? "new-password" : "current-password"
-                  }
-                  textContentType={isSignUp ? "newPassword" : "password"}
-                  returnKeyType="done"
-                  onSubmitEditing={handleSubmit}
-                  style={s.inputInner}
-                  editable={!loading}
-                />
-                <Pressable
-                  onPress={() => setShowPassword(!showPassword)}
-                  hitSlop={10}
-                  style={s.eyeBtn}
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={20}
-                    color={brand.gray400}
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Remember me + Forgot password */}
-            <View style={s.optionsRow}>
+          <ScrollView
+            contentContainerStyle={s.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ========== HEADER ========== */}
+            <Animated.View entering={FadeIn.duration(400)} style={s.header}>
               <Pressable
-                onPress={() => setRememberMe(!rememberMe)}
-                style={s.checkboxRow}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: rememberMe }}
+                accessibilityRole="button"
+                accessibilityLabel="Retour"
+                hitSlop={12}
+                onPress={() => {
+                  haptic();
+                  router.back();
+                }}
+                style={({ pressed }) => [
+                  s.backBtn,
+                  { backgroundColor: t.surfaceMuted, borderColor: t.border },
+                  pressed && s.pressed,
+                ]}
               >
-                <View
-                  style={[
-                    s.checkbox,
-                    rememberMe && s.checkboxChecked,
-                  ]}
-                >
-                  {rememberMe && (
-                    <Ionicons name="checkmark" size={14} color={brand.white} />
-                  )}
-                </View>
-                <Text style={s.checkboxLabel}>Se souvenir de moi</Text>
+                <Ionicons name="arrow-back" size={22} color={t.text} />
               </Pressable>
 
-              {!isSignUp && (
-                <Pressable
-                  onPress={handleForgotPassword}
-                  hitSlop={8}
-                  style={({ pressed }) => pressed && s.pressed}
+              <View style={s.brandMini}>
+                <NajdaLogo size={32} />
+                <Text style={[s.brandMiniWord, { color: t.text }]}>Najda</Text>
+              </View>
+
+              <View style={{ width: 44 }} />
+            </Animated.View>
+
+            {/* ========== TABS animées ========== */}
+            <Animated.View
+              entering={FadeIn.delay(100).duration(400)}
+              onLayout={(e: LayoutChangeEvent) => setTabsWidth(e.nativeEvent.layout.width)}
+              style={[
+                s.tabs,
+                { backgroundColor: t.surfaceMuted, borderColor: t.border },
+              ]}
+            >
+              {/* Indicateur dégradé qui slide */}
+              {tabsWidth > 0 && (
+                <Animated.View style={[s.tabIndicator, tabIndicatorStyle]}>
+                  <LinearGradient
+                    colors={najdaGradient as unknown as [string, string, ...string[]]}
+                    start={najdaGradientDirection.start}
+                    end={najdaGradientDirection.end}
+                    style={s.tabIndicatorFill}
+                  />
+                </Animated.View>
+              )}
+
+              <Pressable
+                style={s.tab}
+                onPress={() => setModeAnd("signin")}
+              >
+                <Text
+                  style={[
+                    s.tabTxt,
+                    { color: !isSignUp ? "#FFFFFF" : t.textSecondary },
+                  ]}
                 >
-                  <Text style={s.forgotLink}>Mot de passe oublié ?</Text>
+                  Se connecter
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={s.tab}
+                onPress={() => setModeAnd("signup")}
+              >
+                <Text
+                  style={[
+                    s.tabTxt,
+                    { color: isSignUp ? "#FFFFFF" : t.textSecondary },
+                  ]}
+                >
+                  Créer un compte
+                </Text>
+              </Pressable>
+            </Animated.View>
+
+            {/* ========== BADGE rôle (si signup avec preset) ========== */}
+            {isSignUp && presetRole && (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                style={[
+                  s.roleBadge,
+                  { backgroundColor: t.primaryMuted },
+                ]}
+              >
+                <Ionicons
+                  name={presetRole === "pro" ? "construct" : "search"}
+                  size={13}
+                  color={t.primary}
+                />
+                <Text style={[s.roleBadgeTxt, { color: t.primary }]}>
+                  {presetRole === "pro"
+                    ? "Compte professionnel"
+                    : "Compte particulier"}
+                </Text>
+              </Animated.View>
+            )}
+
+            {/* ========== TITRE ========== */}
+            <Animated.Text
+              key={`title-${mode}`}
+              entering={FadeInDown.duration(350)}
+              style={[s.title, { color: t.text }]}
+            >
+              {isSignUp ? "Bienvenue chez Najda." : "Content de vous revoir."}
+            </Animated.Text>
+            <Animated.Text
+              key={`sub-${mode}`}
+              entering={FadeInDown.delay(60).duration(350)}
+              style={[s.subtitle, { color: t.textSecondary }]}
+            >
+              {isSignUp
+                ? "Créez votre compte en 30 secondes pour accéder à des artisans vérifiés."
+                : "Connectez-vous pour retrouver vos artisans et rendez-vous."}
+            </Animated.Text>
+
+            {/* ========== CHAMPS ========== */}
+            <View style={s.fields}>
+              {/* Email */}
+              <View style={s.fieldGroup}>
+                <Text style={[s.label, { color: t.textSecondary }]}>
+                  Adresse email
+                </Text>
+                <View
+                  style={[
+                    s.inputRow,
+                    { backgroundColor: t.surfaceMuted, borderColor: t.border },
+                    focused === "email" && { borderColor: t.primary, backgroundColor: t.surface },
+                    error && !email.trim() && { borderColor: t.danger },
+                  ]}
+                >
+                  <Ionicons
+                    name="mail-outline"
+                    size={18}
+                    color={focused === "email" ? t.primary : t.textSecondary}
+                    style={s.inputIcon}
+                  />
+                  <TextInput
+                    value={email}
+                    onChangeText={(v) => {
+                      setEmail(v);
+                      if (error) setError(null);
+                    }}
+                    onFocus={() => setFocused("email")}
+                    onBlur={() => setFocused(null)}
+                    placeholder="vous@exemple.com"
+                    placeholderTextColor={t.textTertiary}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    returnKeyType="next"
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    style={[s.inputInner, { color: t.text }]}
+                    editable={!loading}
+                  />
+                  {email.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+                    <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+                  )}
+                </View>
+              </View>
+
+              {/* Mot de passe */}
+              <View style={s.fieldGroup}>
+                <Text style={[s.label, { color: t.textSecondary }]}>
+                  Mot de passe
+                </Text>
+                <View
+                  style={[
+                    s.inputRow,
+                    { backgroundColor: t.surfaceMuted, borderColor: t.border },
+                    focused === "password" && { borderColor: t.primary, backgroundColor: t.surface },
+                    error && !password && { borderColor: t.danger },
+                  ]}
+                >
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={18}
+                    color={focused === "password" ? t.primary : t.textSecondary}
+                    style={s.inputIcon}
+                  />
+                  <TextInput
+                    ref={passwordRef}
+                    value={password}
+                    onChangeText={(v) => {
+                      setPassword(v);
+                      if (error) setError(null);
+                    }}
+                    onFocus={() => setFocused("password")}
+                    onBlur={() => setFocused(null)}
+                    placeholder={
+                      isSignUp ? "Minimum 8 caractères" : "Votre mot de passe"
+                    }
+                    placeholderTextColor={t.textTertiary}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete={
+                      isSignUp ? "new-password" : "current-password"
+                    }
+                    textContentType={isSignUp ? "newPassword" : "password"}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSubmit}
+                    style={[s.inputInner, { color: t.text }]}
+                    editable={!loading}
+                  />
+                  <Pressable
+                    onPress={() => setShowPassword(!showPassword)}
+                    hitSlop={10}
+                    style={s.eyeBtn}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color={t.textSecondary}
+                    />
+                  </Pressable>
+                </View>
+
+                {/* Indicateur de force (signup uniquement) */}
+                {isSignUp && password.length > 0 && (
+                  <View style={s.strengthRow}>
+                    <View style={[s.strengthTrack, { backgroundColor: t.surfaceMuted }]}>
+                      <Animated.View style={[s.strengthFill, strengthBarStyle]} />
+                    </View>
+                    <Text
+                      style={[
+                        s.strengthLabel,
+                        {
+                          color:
+                            strength.score >= 3
+                              ? "#10B981"
+                              : strength.score >= 2
+                                ? "#D97706"
+                                : "#EF4444",
+                        },
+                      ]}
+                    >
+                      {strength.label}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Remember + Forgot */}
+              <View style={s.optionsRow}>
+                <Pressable
+                  onPress={() => {
+                    haptic();
+                    setRememberMe(!rememberMe);
+                  }}
+                  style={s.checkboxRow}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: rememberMe }}
+                >
+                  <View
+                    style={[
+                      s.checkbox,
+                      { backgroundColor: t.surfaceMuted, borderColor: t.borderStrong },
+                      rememberMe && { backgroundColor: t.primary, borderColor: t.primary },
+                    ]}
+                  >
+                    {rememberMe && (
+                      <Ionicons name="checkmark" size={14} color={t.primaryText} />
+                    )}
+                  </View>
+                  <Text style={[s.checkboxLabel, { color: t.textSecondary }]}>
+                    Se souvenir de moi
+                  </Text>
                 </Pressable>
+
+                {!isSignUp && (
+                  <Pressable
+                    onPress={handleForgotPassword}
+                    hitSlop={8}
+                    style={({ pressed }) => pressed && s.pressed}
+                  >
+                    <Text style={[s.forgotLink, { color: t.primary }]}>
+                      Mot de passe oublié ?
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* Error */}
+              {error && (
+                <Animated.View
+                  entering={FadeIn.duration(200)}
+                  style={[
+                    s.errorBox,
+                    { backgroundColor: t.dangerMuted, borderColor: t.danger },
+                  ]}
+                >
+                  <Ionicons name="alert-circle" size={16} color={t.danger} />
+                  <Text style={[s.errorText, { color: t.danger }]}>{error}</Text>
+                </Animated.View>
               )}
             </View>
 
-            {/* Erreur */}
-            {error && (
-              <View style={s.errorBox}>
-                <Ionicons
-                  name="alert-circle"
-                  size={16}
-                  color={brand.danger600}
-                />
-                <Text style={s.errorText}>{error}</Text>
-              </View>
-            )}
-          </View>
+            {/* ========== SUBMIT ========== */}
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleSubmit}
+              disabled={loading}
+              style={({ pressed }) => [
+                s.submitWrap,
+                loading && s.submitDisabled,
+                pressed && !loading && s.ctaPressed,
+              ]}
+            >
+              <LinearGradient
+                colors={najdaGradient as unknown as [string, string, ...string[]]}
+                start={najdaGradientDirection.start}
+                end={najdaGradientDirection.end}
+                style={s.submit}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Text style={s.submitTxt}>
+                      {isSignUp ? "Créer mon compte" : "Se connecter"}
+                    </Text>
+                    <View style={s.submitArrow}>
+                      <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                    </View>
+                  </>
+                )}
+              </LinearGradient>
+            </Pressable>
 
-          {/* Submit */}
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              s.submitBtn,
-              loading && s.submitBtnDisabled,
-              pressed && !loading && s.btnPressed,
-            ]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={brand.white} />
-            ) : (
-              <Text style={s.submitBtnText}>
-                {isSignUp ? "Créer mon compte" : "Se connecter"}
+            {/* ========== TOGGLE bas ========== */}
+            <Pressable
+              onPress={() => setModeAnd(isSignUp ? "signin" : "signup")}
+              disabled={loading}
+              style={({ pressed }) => [s.toggle, pressed && s.pressed]}
+              accessibilityRole="button"
+              hitSlop={6}
+            >
+              <Text style={[s.toggleText, { color: t.textSecondary }]}>
+                {isSignUp
+                  ? "Vous avez déjà un compte ?  "
+                  : "Pas encore de compte ?  "}
+                <Text style={[s.toggleLink, { color: t.primary }]}>
+                  {isSignUp ? "Se connecter" : "S'inscrire"}
+                </Text>
               </Text>
-            )}
-          </Pressable>
+            </Pressable>
 
-          {/* Toggle */}
-          <Pressable
-            onPress={toggleMode}
-            disabled={loading}
-            style={({ pressed }) => [s.toggle, pressed && s.pressed]}
-            accessibilityRole="button"
-          >
-            <Text style={s.toggleText}>
-              {isSignUp
-                ? "Vous avez déjà un compte ?  "
-                : "Pas encore de compte ?  "}
-              <Text style={s.toggleLink}>
-                {isSignUp ? "Se connecter" : "S'inscrire"}
+            <Text style={[s.legal, { color: t.textTertiary }]}>
+              En continuant, vous acceptez nos{" "}
+              <Text style={[s.legalLink, { color: t.textSecondary }]}>CGU</Text>
+              {" "}et notre{" "}
+              <Text style={[s.legalLink, { color: t.textSecondary }]}>
+                politique de confidentialité
               </Text>
+              .
             </Text>
-          </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
+}
+
+// =====================================================
+// Password strength
+// =====================================================
+function computeStrength(pw: string): { score: number; label: string } {
+  if (!pw) return { score: 0, label: "" };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const labels = ["Trop court", "Faible", "Moyen", "Bon", "Excellent"];
+  return { score, label: labels[score] };
 }
 
 function translateError(message: string): string {
@@ -332,68 +626,159 @@ function translateError(message: string): string {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: brand.white },
+  root: { flex: 1 },
+  safe: { flex: 1 },
   flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: space.lg,
     paddingBottom: space.xl,
   },
-  header: { paddingTop: space.sm, paddingBottom: space.xl },
+
+  haloWrap: {
+    position: "absolute",
+    top: "5%",
+    right: "-50%",
+    width: 700,
+    height: 700,
+  },
+  halo: { flex: 1, borderRadius: 350 },
+
+  // ============= HEADER =============
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
+  },
   backBtn: {
     width: 44,
     height: 44,
     borderRadius: radius.full,
-    backgroundColor: brand.gray50,
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: -4,
   },
-  pressed: { opacity: 0.6 },
-  title: {
-    ...T["3xl"],
+  brandMini: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  brandMiniWord: {
+    fontSize: 17,
     fontWeight: "700",
-    color: brand.gray900,
-    letterSpacing: -0.8,
+    letterSpacing: -0.4,
+  },
+
+  // ============= TABS =============
+  tabs: {
+    flexDirection: "row",
+    borderRadius: radius.full,
+    padding: 4,
+    marginBottom: space.xl,
+    borderWidth: 1,
+    position: "relative",
+  },
+  tabIndicator: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    bottom: 4,
+    borderRadius: radius.full,
+    overflow: "hidden",
+  },
+  tabIndicatorFill: {
+    flex: 1,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  tabTxt: { ...T.sm, fontWeight: "600" },
+
+  // ============= TITRE =============
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  roleBadgeTxt: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: -0.1,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    letterSpacing: -1.2,
+    lineHeight: 34,
     marginBottom: space.sm,
   },
   subtitle: {
     ...T.base,
-    color: brand.gray500,
     marginBottom: space.xl,
-    maxWidth: 320,
+    maxWidth: 340,
   },
-  fields: { gap: space.md, marginBottom: space.xl },
+
+  // ============= CHAMPS =============
+  fields: { gap: space.md, marginBottom: space.lg },
   fieldGroup: { gap: 8 },
-  label: { ...T.sm, fontWeight: "600", color: brand.gray700 },
-  input: {
-    height: comp.inputHeight,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    backgroundColor: brand.white,
-    paddingHorizontal: 16,
-    ...T.base,
-    color: brand.gray900,
-  },
+  label: { ...T.sm, fontWeight: "600" },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    height: comp.inputHeight,
-    borderRadius: radius.md,
+    height: 56,
+    borderRadius: 14,
     borderWidth: 1.5,
-    backgroundColor: brand.white,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
   },
+  inputIcon: { marginRight: 10 },
   inputInner: {
     flex: 1,
     ...T.base,
-    color: brand.gray900,
     paddingVertical: 0,
   },
   eyeBtn: {
     padding: 4,
     marginLeft: 8,
   },
+
+  // ============= STRENGTH =============
+  strengthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  strengthTrack: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  strengthFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  strengthLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    minWidth: 70,
+    textAlign: "right",
+  },
+
+  // ============= OPTIONS =============
   optionsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -410,53 +795,75 @@ const s = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: brand.gray300,
-    backgroundColor: brand.white,
     justifyContent: "center",
     alignItems: "center",
   },
-  checkboxChecked: {
-    backgroundColor: brand.primary500,
-    borderColor: brand.primary500,
-  },
   checkboxLabel: {
     ...T.sm,
-    color: brand.gray700,
     fontWeight: "500",
   },
   forgotLink: {
     ...T.sm,
-    color: brand.primary500,
     fontWeight: "600",
   },
+
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: brand.danger50,
     borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    borderWidth: 1,
   },
   errorText: {
     flex: 1,
     ...T.sm,
-    color: brand.danger700,
     fontWeight: "500",
   },
-  submitBtn: {
-    height: comp.buttonHeight,
-    borderRadius: radius.md,
-    backgroundColor: brand.primary500,
-    justifyContent: "center",
-    alignItems: "center",
+
+  // ============= SUBMIT =============
+  submitWrap: {
     marginBottom: space.md,
+    borderRadius: 16,
     ...shadow.lg,
   },
-  submitBtnDisabled: { opacity: 0.65 },
-  btnPressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
-  submitBtnText: { ...T.base, fontWeight: "600", color: brand.white },
-  toggle: { alignItems: "center", paddingVertical: space.sm },
-  toggleText: { ...T.sm, color: brand.gray500 },
-  toggleLink: { color: brand.primary500, fontWeight: "600" },
+  submit: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 22,
+    paddingRight: 6,
+    height: 58,
+    borderRadius: 16,
+  },
+  submitDisabled: { opacity: 0.65 },
+  submitTxt: { ...T.base, fontWeight: "700", color: "#FFFFFF" },
+  submitArrow: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.20)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  ctaPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+
+  toggle: {
+    alignItems: "center",
+    paddingVertical: space.sm,
+    marginBottom: space.md,
+  },
+  toggleText: { ...T.sm },
+  toggleLink: { fontWeight: "700" },
+
+  legal: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    paddingHorizontal: space.sm,
+  },
+  legalLink: { textDecorationLine: "underline" },
+
+  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
 });

@@ -14,7 +14,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { brand, space, radius, shadow, text as T } from "@/constants/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  space,
+  radius,
+  shadow,
+  text as T,
+  najdaGradient,
+  najdaGradientDirection,
+} from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 import {
   getConversation,
   getMessages,
@@ -24,6 +33,7 @@ import {
   type Conversation,
   type Message,
 } from "@/lib/api";
+import { Avatar } from "@/components/Avatar";
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -56,6 +66,7 @@ function formatDateSeparator(iso: string): string {
 
 export default function ConversationScreen() {
   const router = useRouter();
+  const t = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -88,7 +99,7 @@ export default function ConversationScreen() {
     };
   }, [loadData]);
 
-  // Realtime subscription
+  // Realtime
   useEffect(() => {
     const unsubscribe = subscribeToConversation(id, (msg) => {
       setMessages((prev) => {
@@ -102,7 +113,7 @@ export default function ConversationScreen() {
     return unsubscribe;
   }, [id]);
 
-  // Auto-scroll au dernier message
+  // Auto-scroll
   useEffect(() => {
     if (messages.length === 0) return;
     setTimeout(() => {
@@ -124,11 +135,12 @@ export default function ConversationScreen() {
     }
   };
 
+  // ============= Loading / Error =============
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]}>
         <View style={s.loader}>
-          <ActivityIndicator size="large" color={brand.primary500} />
+          <ActivityIndicator size="large" color={t.primary} />
         </View>
       </SafeAreaView>
     );
@@ -136,14 +148,17 @@ export default function ConversationScreen() {
 
   if (!conversation) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]}>
         <View style={s.loader}>
-          <Text style={s.errorTxt}>Conversation introuvable</Text>
+          <Text style={[s.errorTxt, { color: t.text }]}>
+            Conversation introuvable
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ============= Render message =============
   const renderItem = ({ item, index }: { item: Message; index: number }) => {
     const previous = messages[index - 1];
     const showDate = shouldShowDateSeparator(item, previous);
@@ -152,17 +167,28 @@ export default function ConversationScreen() {
       return (
         <View>
           {showDate && (
-            <Text style={s.dateSeparator}>
-              {formatDateSeparator(item.createdAt)}
-            </Text>
+            <View style={s.dateSeparatorWrap}>
+              <View style={[s.dateLine, { backgroundColor: t.border }]} />
+              <Text style={[s.dateSeparator, { color: t.textTertiary }]}>
+                {formatDateSeparator(item.createdAt)}
+              </Text>
+              <View style={[s.dateLine, { backgroundColor: t.border }]} />
+            </View>
           )}
-          <View style={s.systemMsg}>
+          <View
+            style={[
+              s.systemMsg,
+              { backgroundColor: t.surfaceMuted, borderColor: t.border },
+            ]}
+          >
             <Ionicons
               name="information-circle-outline"
-              size={14}
-              color={brand.gray500}
+              size={13}
+              color={t.textSecondary}
             />
-            <Text style={s.systemTxt}>{item.text}</Text>
+            <Text style={[s.systemTxt, { color: t.textSecondary }]}>
+              {item.text}
+            </Text>
           </View>
         </View>
       );
@@ -172,139 +198,185 @@ export default function ConversationScreen() {
     return (
       <View>
         {showDate && (
-          <Text style={s.dateSeparator}>
-            {formatDateSeparator(item.createdAt)}
-          </Text>
+          <View style={s.dateSeparatorWrap}>
+            <View style={[s.dateLine, { backgroundColor: t.border }]} />
+            <Text style={[s.dateSeparator, { color: t.textTertiary }]}>
+              {formatDateSeparator(item.createdAt)}
+            </Text>
+            <View style={[s.dateLine, { backgroundColor: t.border }]} />
+          </View>
         )}
-        <View
-          style={[
-            s.msgRow,
-            isMe ? s.msgRowMe : s.msgRowOther,
-          ]}
-        >
-          <View
-            style={[
-              s.bubble,
-              isMe ? s.bubbleMe : s.bubbleOther,
-            ]}
-          >
-            <Text
+        <View style={[s.msgRow, isMe ? s.msgRowMe : s.msgRowOther]}>
+          {isMe ? (
+            <LinearGradient
+              colors={najdaGradient as unknown as [string, string, ...string[]]}
+              start={najdaGradientDirection.start}
+              end={najdaGradientDirection.end}
+              style={[s.bubble, s.bubbleMe]}
+            >
+              <Text style={[s.bubbleTxt, { color: "#FFFFFF" }]}>
+                {item.text}
+              </Text>
+              <Text style={[s.bubbleTime, { color: "rgba(255,255,255,0.75)" }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+            </LinearGradient>
+          ) : (
+            <View
               style={[
-                s.bubbleTxt,
-                isMe ? s.bubbleTxtMe : s.bubbleTxtOther,
+                s.bubble,
+                s.bubbleOther,
+                { backgroundColor: t.surfaceMuted, borderColor: t.border },
               ]}
             >
-              {item.text}
-            </Text>
-          </View>
-          <Text style={s.msgTime}>{formatTime(item.createdAt)}</Text>
+              <Text style={[s.bubbleTxt, { color: t.text }]}>{item.text}</Text>
+              <Text style={[s.bubbleTime, { color: t.textTertiary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={["top"]}>
+    <SafeAreaView
+      style={[s.safe, { backgroundColor: t.bg }]}
+      edges={["top", "bottom"]}
+    >
       <StatusBar barStyle="dark-content" />
 
-      <View style={s.header}>
+      {/* ============= HEADER ============= */}
+      <View
+        style={[
+          s.header,
+          { backgroundColor: t.surface, borderBottomColor: t.border },
+        ]}
+      >
         <Pressable
-          style={({ pressed }) => [s.backBtn, pressed && s.op]}
           onPress={() => router.back()}
           hitSlop={12}
+          style={({ pressed }) => [
+            s.backBtn,
+            { backgroundColor: t.surfaceMuted, borderColor: t.border },
+            pressed && s.pressed,
+          ]}
         >
-          <Ionicons name="arrow-back" size={22} color={brand.gray800} />
+          <Ionicons name="arrow-back" size={20} color={t.text} />
         </Pressable>
 
         <Pressable
-          style={s.headerInfo}
-          onPress={() => {
-            if (conversation.artisan) {
-              router.push({
-                pathname: "/(app)/artisan/[id]",
-                params: { id: conversation.artisan.id },
-              });
-            }
-          }}
+          onPress={() =>
+            conversation.artisan &&
+            router.push({
+              pathname: "/(app)/artisan/[id]",
+              params: { id: conversation.artisan.id },
+            })
+          }
+          style={s.headerCenter}
         >
-          <View style={s.headerAvatar}>
-            <Text style={s.headerAvatarTxt}>
-              {conversation.artisan?.initials ?? "?"}
-            </Text>
-          </View>
-          <View>
-            <Text style={s.headerName}>
+          <Avatar
+            uri={conversation.artisan?.avatarUrl}
+            initials={conversation.artisan?.initials ?? "?"}
+            size={40}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.headerName, { color: t.text }]} numberOfLines={1}>
               {conversation.artisan
                 ? `${conversation.artisan.firstName} ${conversation.artisan.lastName}`
                 : "Artisan"}
             </Text>
-            {conversation.artisan && (
-              <View style={s.headerStatus}>
-                <View style={s.statusDot} />
-                <Text style={s.statusTxt}>En ligne</Text>
-              </View>
-            )}
+            <View style={s.headerSubRow}>
+              <View
+                style={[
+                  s.headerDot,
+                  { backgroundColor: "#10B981" },
+                ]}
+              />
+              <Text
+                style={[s.headerSub, { color: t.textSecondary }]}
+                numberOfLines={1}
+              >
+                En ligne
+              </Text>
+            </View>
           </View>
         </Pressable>
 
         <Pressable
-          style={({ pressed }) => [s.backBtn, pressed && s.op]}
+          onPress={() => {}}
           hitSlop={12}
-          onPress={() => {
-            if (conversation.artisan) {
-              router.push({
-                pathname: "/(app)/artisan/[id]",
-                params: { id: conversation.artisan.id },
-              });
-            }
-          }}
+          style={({ pressed }) => [
+            s.backBtn,
+            { backgroundColor: t.surfaceMuted, borderColor: t.border },
+            pressed && s.pressed,
+          ]}
         >
-          <Ionicons name="ellipsis-vertical" size={20} color={brand.gray700} />
+          <Ionicons name="call-outline" size={18} color={t.text} />
         </Pressable>
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={s.flex}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
+        {/* ============= MESSAGES ============= */}
         <FlatList
           ref={listRef}
           data={messages}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={s.msgList}
-          onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({ animated: false })
-          }
+          keyExtractor={(m) => m.id}
+          contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         />
 
-        <View style={s.inputBar}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="Écrire un message..."
-            placeholderTextColor={brand.gray400}
-            style={s.input}
-            multiline
-            maxLength={500}
-            editable={!sending}
-          />
-          <Pressable
-            style={({ pressed }) => [
-              s.sendBtn,
-              (!input.trim() || sending) && s.sendBtnDisabled,
-              pressed && input.trim() && !sending && s.sendBtnP,
+        {/* ============= INPUT ============= */}
+        <View
+          style={[
+            s.inputBar,
+            { backgroundColor: t.surface, borderTopColor: t.border },
+          ]}
+        >
+          <View
+            style={[
+              s.inputWrap,
+              { backgroundColor: t.surfaceMuted, borderColor: t.border },
             ]}
+          >
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder="Écrivez un message…"
+              placeholderTextColor={t.textTertiary}
+              multiline
+              style={[s.input, { color: t.text }]}
+              editable={!sending}
+            />
+          </View>
+          <Pressable
             onPress={handleSend}
             disabled={!input.trim() || sending}
+            style={({ pressed }) => [
+              s.sendWrap,
+              !input.trim() && { opacity: 0.4 },
+              pressed && input.trim() && s.ctaPressed,
+            ]}
           >
-            {sending ? (
-              <ActivityIndicator size="small" color={brand.white} />
-            ) : (
-              <Ionicons name="arrow-up" size={20} color={brand.white} />
-            )}
+            <LinearGradient
+              colors={najdaGradient as unknown as [string, string, ...string[]]}
+              start={najdaGradientDirection.start}
+              end={najdaGradientDirection.end}
+              style={s.send}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+              )}
+            </LinearGradient>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -313,148 +385,160 @@ export default function ConversationScreen() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: brand.gray50 },
-  flex: { flex: 1 },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorTxt: { ...T.base, color: brand.gray500 },
+  safe: { flex: 1 },
 
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  errorTxt: { ...T.base },
+
+  // ===== HEADER =====
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    backgroundColor: brand.white,
-    borderBottomWidth: 1,
-    borderBottomColor: brand.gray100,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
   },
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: radius.full,
-    backgroundColor: brand.gray50,
+    borderRadius: 13,
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  op: { opacity: 0.6 },
-  headerInfo: {
+  headerCenter: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    backgroundColor: brand.primary500,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerAvatarTxt: { fontSize: 14, fontWeight: "700", color: brand.white },
   headerName: {
-    ...T.base,
+    fontSize: 15,
     fontWeight: "700",
-    color: brand.gray900,
     letterSpacing: -0.2,
+    marginBottom: 1,
   },
-  headerStatus: { flexDirection: "row", alignItems: "center", gap: 4 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E" },
-  statusTxt: { ...T.xs, color: brand.gray500 },
+  headerSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  headerDot: { width: 6, height: 6, borderRadius: 3 },
+  headerSub: { fontSize: 11, fontWeight: "500" },
 
-  msgList: { padding: space.md, paddingBottom: space.lg },
+  // ===== LIST =====
+  list: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    gap: 4,
+  },
 
+  // ===== DATE SEPARATOR =====
+  dateSeparatorWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+  },
+  dateLine: { flex: 1, height: 0.5 },
   dateSeparator: {
-    ...T.xs,
-    color: brand.gray400,
-    textAlign: "center",
-    marginVertical: space.md,
+    fontSize: 11,
     fontWeight: "600",
-    textTransform: "capitalize",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
 
+  // ===== SYSTEM MESSAGE =====
   systemMsg: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     alignSelf: "center",
-    backgroundColor: brand.gray100,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    borderWidth: 0.5,
     marginVertical: 4,
     maxWidth: "85%",
   },
-  systemTxt: {
-    ...T.xs,
-    color: brand.gray600,
-    flex: 1,
-    fontStyle: "italic",
-    lineHeight: 16,
-  },
+  systemTxt: { fontSize: 11, fontWeight: "500", flexShrink: 1 },
 
+  // ===== MESSAGE BUBBLES =====
   msgRow: { marginVertical: 2 },
   msgRowMe: { alignItems: "flex-end" },
   msgRowOther: { alignItems: "flex-start" },
-
   bubble: {
     maxWidth: "78%",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 18,
+    minWidth: 60,
   },
   bubbleMe: {
-    backgroundColor: brand.primary500,
-    borderBottomRightRadius: 4,
+    borderRadius: 18,
+    borderBottomRightRadius: 6,
   },
   bubbleOther: {
-    backgroundColor: brand.white,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: brand.gray100,
+    borderRadius: 18,
+    borderBottomLeftRadius: 6,
+    borderWidth: 0.5,
   },
-  bubbleTxt: { ...T.base, lineHeight: 20 },
-  bubbleTxtMe: { color: brand.white },
-  bubbleTxtOther: { color: brand.gray900 },
-  msgTime: {
-    ...T.xs,
-    color: brand.gray400,
-    marginTop: 2,
-    marginHorizontal: 4,
+  bubbleTxt: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "500",
+  },
+  bubbleTime: {
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 3,
+    alignSelf: "flex-end",
   },
 
+  // ===== INPUT =====
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 10,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    backgroundColor: brand.white,
-    borderTopWidth: 1,
-    borderTopColor: brand.gray100,
+    gap: 8,
+    paddingHorizontal: space.lg,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderTopWidth: 0.5,
+  },
+  inputWrap: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 10 : 6,
+    maxHeight: 120,
+    minHeight: 42,
+    justifyContent: "center",
   },
   input: {
-    flex: 1,
-    backgroundColor: brand.gray50,
-    borderWidth: 1,
-    borderColor: brand.gray200,
-    borderRadius: radius.lg,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minHeight: 44,
-    maxHeight: 120,
-    ...T.base,
-    color: brand.gray900,
+    fontSize: 14,
+    fontWeight: "500",
+    padding: 0,
+    margin: 0,
   },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: brand.primary500,
-    justifyContent: "center",
-    alignItems: "center",
+  sendWrap: {
+    borderRadius: 20,
+    overflow: "hidden",
     ...shadow.md,
   },
-  sendBtnDisabled: { backgroundColor: brand.gray300 },
-  sendBtnP: { opacity: 0.85, transform: [{ scale: 0.95 }] },
+  send: {
+    width: 42,
+    height: 42,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
+  ctaPressed: { opacity: 0.92, transform: [{ scale: 0.96 }] },
 });

@@ -47,3 +47,67 @@ export function getCategory(id: string | null): CategoryInfo | null {
   if (!id) return null;
   return CATEGORIES.find((c) => c.id === id) ?? null;
 }
+
+/**
+ * Durée moyenne estimée d'une intervention par catégorie (en minutes).
+ * Sert à calculer l'heure de fin dans le flux de réservation.
+ */
+export const DEFAULT_DURATION_MIN: Record<string, number> = {
+  plomberie: 90,
+  serrurerie: 60,
+  electricite: 120,
+  chauffage: 120,
+  peinture: 240,
+  menuiserie: 180,
+  maconnerie: 240,
+  carrelage: 180,
+  climatisation: 180,
+  jardinage: 120,
+};
+
+/**
+ * Options de durée que l'utilisateur peut choisir explicitement
+ * (au cas où il connaît mieux son besoin que la valeur par défaut).
+ */
+export const DURATION_OPTIONS: { value: number; label: string }[] = [
+  { value: 60, label: "1 heure" },
+  { value: 90, label: "1h30" },
+  { value: 120, label: "2 heures" },
+  { value: 180, label: "3 heures" },
+  { value: 240, label: "Demi-journée" },
+  { value: 480, label: "Journée entière" },
+];
+
+/**
+ * Petite description évocatrice par catégorie (sert dans les cards).
+ */
+export const CATEGORY_TAGLINE: Record<string, string> = {
+  plomberie: "Fuites, débouchages, sanitaires",
+  serrurerie: "Portes, serrures, dépannage",
+  electricite: "Pannes, mise aux normes, domotique",
+  chauffage: "Chaudières, pompes à chaleur",
+  peinture: "Intérieur, extérieur, déco",
+  menuiserie: "Cuisines, placards, escaliers",
+  maconnerie: "Murs, terrasses, extensions",
+  carrelage: "Sol, mural, faïence",
+  climatisation: "Installation, entretien, dépannage",
+  jardinage: "Tonte, taille, aménagement",
+};
+
+/**
+ * Couleur d'accent par métier, toujours dans la palette Najda
+ * (variations bleu / violet / lavande). Sobre, jamais saturé.
+ * `bg` = fond pastel · `icon` = couleur de l'icône.
+ */
+export const CATEGORY_COLORS: Record<string, { bg: string; icon: string }> = {
+  plomberie:     { bg: "#E6EEFF", icon: "#5B7DD4" }, // bleu eau
+  serrurerie:    { bg: "#EAE6FF", icon: "#6F5FCC" }, // violet sécurité
+  electricite:   { bg: "#EFE7FF", icon: "#8B7BE8" }, // lavande énergie
+  chauffage:     { bg: "#F4E8F5", icon: "#A87BC8" }, // mauve chaleur
+  peinture:      { bg: "#F6E7F3", icon: "#B870C0" }, // rose violet créatif
+  menuiserie:    { bg: "#E7EAFC", icon: "#5F6BB8" }, // indigo artisanal
+  maconnerie:    { bg: "#EAE9F0", icon: "#7A7793" }, // gris violet pierre
+  carrelage:     { bg: "#E3ECFB", icon: "#4F77C0" }, // bleu acier géométrique
+  climatisation: { bg: "#E1E9F7", icon: "#6F8BC0" }, // bleu glace
+  jardinage:     { bg: "#E4ECEC", icon: "#6B8585" }, // vert sourd dans la famille
+};

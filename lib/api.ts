@@ -31,6 +31,7 @@ type DbArtisan = {
   city: string | null;
   latitude: number | null;
   longitude: number | null;
+  avatar_url: string | null;
   created_at: string;
 };
 
@@ -89,6 +90,7 @@ export type Artisan = {
   city: string | null;
   latitude: number | null;
   longitude: number | null;
+  avatarUrl: string | null;
 };
 
 export type Review = {
@@ -167,6 +169,7 @@ function mapArtisan(db: DbArtisan): Artisan {
     city: db.city ?? null,
     latitude: db.latitude != null ? Number(db.latitude) : null,
     longitude: db.longitude != null ? Number(db.longitude) : null,
+    avatarUrl: db.avatar_url ?? null,
   };
 }
 
@@ -369,8 +372,11 @@ type DbProfile = {
   updated_at: string;
 };
 
+export type UserRole = "client" | "pro";
+
 export type Profile = {
   id: string;
+  role: UserRole;
   firstName: string;
   lastName: string;
   phone: string;
@@ -381,9 +387,11 @@ export type Profile = {
   isComplete: boolean;
 };
 
-function mapProfile(db: DbProfile): Profile {
+function mapProfile(db: DbProfile & { role?: string }): Profile {
+  const role: UserRole = db.role === "pro" ? "pro" : "client";
   const profile: Profile = {
     id: db.id,
+    role,
     firstName: db.first_name ?? "",
     lastName: db.last_name ?? "",
     phone: db.phone ?? "",
