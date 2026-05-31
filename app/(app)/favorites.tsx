@@ -21,6 +21,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAllArtisans, availabilityLabel, type Artisan } from "@/lib/api";
 import { getMyFavorites, removeFavorite } from "@/lib/api-extras";
 import { Avatar } from "@/components/Avatar";
+import { CATEGORIES } from "@/constants/categories";
 
 function isAvailable(a: Artisan) {
   return a.availability === "now" || a.availability === "today";
@@ -176,7 +177,7 @@ export default function FavoritesScreen() {
                       style={[s.job, { color: t.textSecondary }]}
                       numberOfLines={1}
                     >
-                      {a.categoryName}
+                      {CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? a.categoryId}
                     </Text>
                     <View style={s.meta}>
                       <Ionicons name="star" size={11} color="#C9A961" />
@@ -307,7 +308,6 @@ const s = StyleSheet.create({
     borderWidth: 1.5,
     marginTop: 8,
   },
-  emptyCtaTxt: { fontSize: 13, fontWeight: "800" },
-
-  pressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  emptyCtaTxt: { fontSize: 14, fontWeight: "800" },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
 });

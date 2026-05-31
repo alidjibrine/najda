@@ -38,7 +38,7 @@ export function Avatar({
     return (
       <Image
         source={{ uri }}
-        style={[base, { backgroundColor: brand.gray200 }, style]}
+        style={[base as object, { backgroundColor: brand.gray200 }, style] as never}
       />
     );
   }
@@ -80,7 +80,7 @@ export function AvatarSquare({
     return (
       <Image
         source={{ uri }}
-        style={[base, { backgroundColor: brand.gray200 }, style]}
+        style={[base as object, { backgroundColor: brand.gray200 }, style] as never}
       />
     );
   }

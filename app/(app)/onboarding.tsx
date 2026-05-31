@@ -52,6 +52,7 @@ export default function OnboardingScreen() {
 
   // Champs pro
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [zoneKm, setZoneKm] = useState<number>(15);
   const [priceRange, setPriceRange] = useState("€€");
   const [yearsExp, setYearsExp] = useState("0");
@@ -124,7 +125,8 @@ export default function OnboardingScreen() {
         return "Ce numéro ne semble pas valide.";
       if (!city.trim()) return "Saisissez votre ville.";
     } else if (step === 2 && role === "pro") {
-      if (!categoryId) return "Choisissez votre métier principal.";
+      if (categoryIds.length === 0)
+        return "Choisissez au moins un métier (vous pouvez en cocher plusieurs).";
       if (!servicesText.trim())
         return "Listez au moins un service que vous proposez.";
     }
@@ -170,20 +172,23 @@ export default function OnboardingScreen() {
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean);
+        const primaryMetier = categoryIds[0] ?? categoryId ?? null;
         await upsertMyProProfile({
-          categoryId,
+          categoryId: primaryMetier,
+          categoryIds,
           city: city.trim(),
           zoneKm,
           priceRange,
           bio: bio.trim(),
           services,
           yearsExp: parseInt(yearsExp, 10) || 0,
-        });
-        if (categoryId) {
+        } as Parameters<typeof upsertMyProProfile>[0]);
+        if (primaryMetier) {
           await upsertMyArtisanCard({
             firstName: firstName.trim(),
             lastName: lastName.trim(),
-            categoryId,
+            categoryId: primaryMetier,
+            categoryIds,
             city: city.trim(),
             bio: bio.trim(),
             services,
@@ -358,19 +363,36 @@ export default function OnboardingScreen() {
             >
               <View>
                 <Text style={[s.label, { color: t.textSecondary }]}>
-                  Votre métier principal
+                  Vos métiers
                 </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={s.catRow}
+                <Text
+                  style={[
+                    s.hint,
+                    { color: t.textTertiary, marginBottom: 8 },
+                  ]}
                 >
+                  Cochez tous les métiers que vous proposez (1 ou plusieurs).
+                  Le premier choisi sera votre métier principal.
+                </Text>
+                <View style={s.catGrid}>
                   {CATEGORIES.map((c) => {
-                    const active = categoryId === c.id;
+                    const active = categoryIds.includes(c.id);
                     return (
                       <Pressable
                         key={c.id}
-                        onPress={() => setCategoryId(c.id)}
+                        onPress={() => {
+                          if (active) {
+                            const next = categoryIds.filter(
+                              (id) => id !== c.id,
+                            );
+                            setCategoryIds(next);
+                            setCategoryId(next[0] ?? null);
+                          } else {
+                            const next = [...categoryIds, c.id];
+                            setCategoryIds(next);
+                            setCategoryId(next[0]);
+                          }
+                        }}
                         style={[
                           s.catPill,
                           {
@@ -392,10 +414,17 @@ export default function OnboardingScreen() {
                         >
                           {c.name}
                         </Text>
+                        {active && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={14}
+                            color="#FFFFFF"
+                          />
+                        )}
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
 
               <View>
@@ -815,6 +844,7 @@ const s = StyleSheet.create({
 
   // ===== CATEGORY chips =====
   catRow: { gap: 6, paddingVertical: 4 },
+  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   catPill: {
     flexDirection: "row",
     alignItems: "center",

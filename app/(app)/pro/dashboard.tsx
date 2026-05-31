@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import {
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -128,6 +129,28 @@ export default function ProDashboardScreen() {
 
   const incompleteProfile = stats.completionPct < 100;
 
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    Promise.all([
+      getMyProfile(),
+      getMyProProfile(),
+      getProIncomingBookings(),
+      countUnreadNotifications(),
+      getProStats(),
+    ])
+      .then(([p, pp, b, n, st]) => {
+        setProfile(p);
+        setProProfile(pp);
+        setBookings(Array.isArray(b) ? (b as ProBooking[]) : []);
+        setUnread(typeof n === "number" ? n : 0);
+        setStats(st ?? EMPTY_STATS);
+      })
+      .catch(() => {})
+      .finally(() => setRefreshing(false));
+  }, []);
+
   return (
     <View style={[s.root, { backgroundColor: t.bg }]}>
       <StatusBar barStyle="light-content" />
@@ -135,6 +158,14 @@ export default function ProDashboardScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#FFFFFF"
+            colors={["#7C8FFF"]}
+          />
+        }
       >
         {/* ============= HERO IDENTITÉ ============= */}
         <LinearGradient
@@ -497,35 +528,63 @@ export default function ProDashboardScreen() {
           </Animated.View>
         )}
 
-        {/* ============= VUE PUBLIQUE ============= */}
+        {/* ============= RACCOURCIS GRID ============= */}
         <Animated.View
           entering={FadeInDown.delay(340).duration(400)}
           style={s.section}
         >
-          <Pressable
-            onPress={() => router.push("/(app)/pro/profile")}
-            style={({ pressed }) => [s.previewCard, pressed && s.pressed]}
-          >
-            <LinearGradient
-              colors={
-                najdaGradient as unknown as [string, string, ...string[]]
-              }
-              start={najdaGradientDirection.start}
-              end={najdaGradientDirection.end}
-              style={s.previewInner}
+          <View style={s.shortcutGrid}>
+            <Pressable
+              onPress={() => router.push("/(app)/pro/stats" as never)}
+              style={({ pressed }) => [
+                s.shortcutCard,
+                { backgroundColor: t.surface, borderColor: t.border },
+                pressed && s.pressed,
+              ]}
             >
-              <View style={s.previewIcon}>
-                <Ionicons name="eye-outline" size={22} color="#FFFFFF" />
+              <View style={[s.shortcutIcon, { backgroundColor: t.primaryMuted }]}>
+                <Ionicons name="stats-chart" size={20} color={t.primary} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.previewTitle}>Voir mon profil public</Text>
-                <Text style={s.previewSub}>
-                  Comment les clients vous voient sur Najda.
-                </Text>
+              <Text style={[s.shortcutLabel, { color: t.text }]}>Stats</Text>
+              <Text style={[s.shortcutSub, { color: t.textSecondary }]} numberOfLines={1}>
+                Revenus mois
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/(app)/pro/reviews" as never)}
+              style={({ pressed }) => [
+                s.shortcutCard,
+                { backgroundColor: t.surface, borderColor: t.border },
+                pressed && s.pressed,
+              ]}
+            >
+              <View style={[s.shortcutIcon, { backgroundColor: t.primaryMuted }]}>
+                <Ionicons name="star" size={20} color={t.primary} />
               </View>
-              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-            </LinearGradient>
-          </Pressable>
+              <Text style={[s.shortcutLabel, { color: t.text }]}>Avis</Text>
+              <Text style={[s.shortcutSub, { color: t.textSecondary }]} numberOfLines={1}>
+                {stats.reviewCount > 0 ? `${stats.reviewCount} avis reçus` : "Aucun avis"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/(app)/pro/profile")}
+              style={({ pressed }) => [
+                s.shortcutCard,
+                { backgroundColor: t.surface, borderColor: t.border },
+                pressed && s.pressed,
+              ]}
+            >
+              <View style={[s.shortcutIcon, { backgroundColor: t.primaryMuted }]}>
+                <Ionicons name="eye-outline" size={20} color={t.primary} />
+              </View>
+              <Text style={[s.shortcutLabel, { color: t.text }]}>Public</Text>
+              <Text style={[s.shortcutSub, { color: t.textSecondary }]} numberOfLines={1}>
+                Vu par clients
+              </Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </ScrollView>
     </View>
@@ -929,7 +988,31 @@ const s = StyleSheet.create({
   },
   progressFill: { height: "100%", borderRadius: 3 },
 
-  // ===== VUE PUBLIQUE =====
+  // ===== RACCOURCIS GRID =====
+  shortcutGrid: { flexDirection: "row", gap: 10 },
+  shortcutCard: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  shortcutIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  shortcutLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  shortcutSub: { fontSize: 11, fontWeight: "500" },
+
+  // ===== VUE PUBLIQUE (deprecated, kept for compat) =====
   previewCard: { borderRadius: 18, overflow: "hidden", ...shadow.md },
   previewInner: {
     flexDirection: "row",

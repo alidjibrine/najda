@@ -465,7 +465,7 @@ export default function ArtisanDetailScreen() {
                       {r.author}
                     </Text>
                     <Text style={[s.reviewDate, { color: t.textTertiary }]}>
-                      {timeAgo(r.createdAt)}
+                      {r.date}
                     </Text>
                   </View>
                   <View style={s.reviewStars}>

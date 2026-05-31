@@ -397,9 +397,9 @@ export default function HomeScreen() {
                     style={[s.upcomingTitle, { color: t.text }]}
                     numberOfLines={1}
                   >
-                    {upcomingBooking.serviceName ?? "Intervention"}
-                    {upcomingBooking.artisanName
-                      ? ` · ${upcomingBooking.artisanName}`
+                    {upcomingBooking.service ?? "Intervention"}
+                    {upcomingBooking.artisan
+                      ? ` · ${upcomingBooking.artisan.firstName} ${upcomingBooking.artisan.lastName}`
                       : ""}
                   </Text>
                 </View>
@@ -705,7 +705,8 @@ export default function HomeScreen() {
                         style={[s.top5Job, { color: t.textSecondary }]}
                         numberOfLines={1}
                       >
-                        {a.categoryName}
+                        {CATEGORIES.find((c) => c.id === a.categoryId)?.name ??
+                          a.categoryId}
                       </Text>
 
                       {/* Rating */}
@@ -1366,10 +1367,9 @@ const s = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.20)",
+    backgroundColor: "rgba(124,143,255,0.10)",
     justifyContent: "center",
     alignItems: "center",
   },
-
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
 });

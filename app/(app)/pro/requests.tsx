@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -99,6 +100,7 @@ export default function ProRequestsScreen() {
   const [tab, setTab] = useState<Tab>("pending");
   const [period, setPeriod] = useState<Period>("all");
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // ===== Modal Accept =====
   const [acceptModal, setAcceptModal] = useState<ProBooking | null>(null);
@@ -115,8 +117,16 @@ export default function ProRequestsScreen() {
     getProIncomingBookings()
       .then((b) => setBookings(Array.isArray(b) ? (b as ProBooking[]) : []))
       .catch(() => setBookings([]))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
   }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -314,6 +324,12 @@ export default function ProRequestsScreen() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+            />
+          }
           contentContainerStyle={[
             s.scroll,
             { paddingBottom: 16 + insets.bottom },

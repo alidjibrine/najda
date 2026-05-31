@@ -18,6 +18,7 @@ type DbArtisan = {
   last_name: string;
   initials: string;
   category_id: string;
+  category_ids?: string[] | null;
   rating: number;
   review_count: number;
   years_exp: number;
@@ -77,6 +78,7 @@ export type Artisan = {
   lastName: string;
   initials: string;
   categoryId: string;
+  categoryIds: string[];
   rating: number;
   reviewCount: number;
   yearsExp: number;
@@ -156,6 +158,9 @@ function mapArtisan(db: DbArtisan): Artisan {
     lastName: db.last_name,
     initials: db.initials,
     categoryId: db.category_id,
+    categoryIds: Array.isArray(db.category_ids) && db.category_ids.length > 0
+      ? db.category_ids
+      : [db.category_id],
     rating: Number(db.rating),
     reviewCount: db.review_count,
     yearsExp: db.years_exp,
@@ -232,10 +237,12 @@ export async function getArtisansByCategory(
   categoryId: string,
   filters?: { service?: string },
 ): Promise<Artisan[]> {
+  // Supporte multi-métiers : on cherche dans category_id OU category_ids
+  // (OR sur le serveur via or() pour ne pas faire 2 requêtes)
   let query = supabase
     .from("artisans")
     .select("*")
-    .eq("category_id", categoryId);
+    .or(`category_id.eq.${categoryId},category_ids.cs.{"${categoryId}"}`);
 
   if (filters?.service) {
     query = query.contains("services", [filters.service]);
@@ -706,7 +713,10 @@ export async function searchArtisans(filters: SearchFilters = {}): Promise<Artis
 
   // Filtre catégorie
   if (filters.categoryId) {
-    req = req.eq("category_id", filters.categoryId);
+    // Supporte multi-métiers : match category_id OR contient le métier dans category_ids
+    req = req.or(
+      `category_id.eq.${filters.categoryId},category_ids.cs.{"${filters.categoryId}"}`,
+    );
   }
 
   // Filtre vérifié
@@ -740,10 +750,10 @@ export async function searchArtisans(filters: SearchFilters = {}): Promise<Artis
 
   let results = (data as DbArtisan[]).map(mapArtisan);
 
-  // Filtrage supplémentaire côté client pour les services (PostgreSQL array)
+  // Filtrage supplémentaire côté client pour les services
+  // (PostgreSQL array recherche partielle pas dispo en RLS pour `services`)
   if (q.length >= 2) {
     const lowerQ = q.toLowerCase();
-    // Inclure les artisans qui matchent par service même si pas dans la requête principale
     const all = results;
     const serviceMatches = all.filter((a) =>
       a.services.some((sv) => sv.toLowerCase().includes(lowerQ)),

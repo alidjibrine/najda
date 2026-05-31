@@ -50,6 +50,7 @@ export default function ProProfileScreen() {
 
   // Form state
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [city, setCity] = useState("");
   const [zoneKm, setZoneKm] = useState(15);
   const [priceRange, setPriceRange] = useState("€€");
@@ -68,6 +69,13 @@ export default function ProProfileScreen() {
       setProProfile(pp);
       if (pp) {
         setCategoryId(pp.categoryId);
+        setCategoryIds(
+          Array.isArray(pp.categoryIds) && pp.categoryIds.length > 0
+            ? pp.categoryIds
+            : pp.categoryId
+            ? [pp.categoryId]
+            : [],
+        );
         setCity(pp.city ?? "");
         setZoneKm(pp.zoneKm ?? 15);
         setPriceRange(pp.priceRange ?? "€€");
@@ -154,8 +162,10 @@ export default function ProProfileScreen() {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
+      const primary = categoryIds[0] ?? categoryId;
       const updated = await upsertMyProProfile({
-        categoryId,
+        categoryId: primary,
+        categoryIds,
         city: city.trim(),
         zoneKm,
         priceRange,
@@ -249,15 +259,41 @@ export default function ProProfileScreen() {
             <Text style={s.email} numberOfLines={1}>
               {user?.email}
             </Text>
-            {selectedCategory && (
-              <View style={s.metierPill}>
-                <Ionicons
-                  name={selectedCategory.icon}
-                  size={12}
-                  color="#FFFFFF"
-                />
-                <Text style={s.metierPillTxt}>{selectedCategory.name}</Text>
-              </View>
+            {categoryIds.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{
+                  gap: 6,
+                  paddingHorizontal: space.lg,
+                  marginTop: 12,
+                }}
+                style={{
+                  alignSelf: "stretch",
+                  marginHorizontal: -space.lg,
+                  flexGrow: 0,
+                }}
+              >
+                {CATEGORIES.filter((c) => categoryIds.includes(c.id)).map(
+                  (c, idx) => (
+                    <View
+                      key={c.id}
+                      style={[
+                        s.metierPill,
+                        idx === 0 && {
+                          backgroundColor: "rgba(255,255,255,0.32)",
+                          borderColor: "rgba(255,255,255,0.55)",
+                        },
+                      ]}
+                    >
+                      <Ionicons name={c.icon} size={13} color="#FFFFFF" />
+                      <Text style={s.metierPillTxt} numberOfLines={1}>
+                        {c.name}
+                      </Text>
+                    </View>
+                  ),
+                )}
+              </ScrollView>
             )}
           </View>
         </LinearGradient>
@@ -270,12 +306,6 @@ export default function ProProfileScreen() {
               entering={FadeInDown.delay(60).duration(400)}
               style={s.infoGrid}
             >
-              <InfoCard
-                icon={selectedCategory?.icon ?? "briefcase-outline"}
-                label="Métier"
-                value={selectedCategory?.name ?? "Non défini"}
-                t={t}
-              />
               <InfoCard
                 icon="location-outline"
                 label="Ville"
@@ -299,31 +329,112 @@ export default function ProProfileScreen() {
                 label="Expérience"
                 value={`${yearsExp} an${parseInt(yearsExp, 10) > 1 ? "s" : ""}`}
                 t={t}
-                wide
               />
             </Animated.View>
           )}
 
-          {/* Métier (édition) */}
+          {/* ===== MÉTIERS (mode lecture) — section dédiée ===== */}
+          {!editing && categoryIds.length > 0 && (
+            <Animated.View
+              entering={FadeInDown.delay(40).duration(400)}
+              style={s.metiersSection}
+            >
+              <View style={s.metiersHead}>
+                <Text style={[s.metiersLabel, { color: t.textSecondary }]}>
+                  Mes métiers
+                </Text>
+                <Text style={[s.metiersCount, { color: t.primary }]}>
+                  {categoryIds.length} compétence
+                  {categoryIds.length > 1 ? "s" : ""}
+                </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.metiersRow}
+              >
+                {CATEGORIES.filter((c) => categoryIds.includes(c.id)).map(
+                  (c, idx) => (
+                    <View key={c.id} style={s.metierBigCard}>
+                      <LinearGradient
+                        colors={
+                          najdaGradient as unknown as [
+                            string,
+                            string,
+                            ...string[],
+                          ]
+                        }
+                        start={najdaGradientDirection.start}
+                        end={najdaGradientDirection.end}
+                        style={s.metierBigIcon}
+                      >
+                        <Ionicons name={c.icon} size={22} color="#FFFFFF" />
+                      </LinearGradient>
+                      <Text
+                        style={[s.metierBigName, { color: t.text }]}
+                        numberOfLines={1}
+                      >
+                        {c.name}
+                      </Text>
+                      {idx === 0 && (
+                        <View
+                          style={[
+                            s.metierBigBadge,
+                            { backgroundColor: t.primaryMuted },
+                          ]}
+                        >
+                          <Ionicons
+                            name="star"
+                            size={9}
+                            color={t.primary}
+                          />
+                          <Text
+                            style={[
+                              s.metierBigBadgeTxt,
+                              { color: t.primary },
+                            ]}
+                          >
+                            Principal
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ),
+                )}
+              </ScrollView>
+            </Animated.View>
+          )}
+
+          {/* Métiers (édition multi-select) */}
           {editing && (
             <Animated.View
               entering={FadeInDown.delay(80).duration(400)}
               style={s.block}
             >
               <Text style={[s.blockLabel, { color: t.textSecondary }]}>
-                Métier principal
+                Vos métiers ({categoryIds.length} sélectionné
+                {categoryIds.length > 1 ? "s" : ""})
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={s.catRow}
-              >
+              <Text style={[s.hint, { color: t.textTertiary }]}>
+                Cochez tous vos métiers. Le 1er sera votre métier principal.
+              </Text>
+              <View style={s.catGrid}>
                 {CATEGORIES.map((c) => {
-                  const active = categoryId === c.id;
+                  const active = categoryIds.includes(c.id);
                   return (
                     <Pressable
                       key={c.id}
-                      onPress={() => setCategoryId(c.id)}
+                      onPress={() => {
+                        if (active) {
+                          const next = categoryIds.filter((id) => id !== c.id);
+                          setCategoryIds(next);
+                          setCategoryId(next[0] ?? null);
+                        } else {
+                          const next = [...categoryIds, c.id];
+                          setCategoryIds(next);
+                          setCategoryId(next[0]);
+                        }
+                      }}
                       style={[
                         s.catPill,
                         {
@@ -345,10 +456,17 @@ export default function ProProfileScreen() {
                       >
                         {c.name}
                       </Text>
+                      {active && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={12}
+                          color="#FFFFFF"
+                        />
+                      )}
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+              </View>
             </Animated.View>
           )}
 
@@ -827,7 +945,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.full,
-    marginTop: 10,
   },
   metierPillTxt: { fontSize: 11, fontWeight: "800", color: "#FFFFFF" },
 
@@ -897,6 +1014,61 @@ const s = StyleSheet.create({
   hint: { fontSize: 11, fontWeight: "500", marginTop: -4 },
 
   catRow: { gap: 6, paddingVertical: 4 },
+  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+
+  metiersSection: { gap: 10, marginBottom: 4 },
+  metiersHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metiersLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  metiersCount: { fontSize: 11, fontWeight: "800" },
+  metiersRow: { gap: 10, paddingVertical: 2 },
+  metierBigCard: {
+    width: 110,
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    backgroundColor: "rgba(124,143,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(124,143,255,0.15)",
+  },
+  metierBigIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  metierBigName: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    textAlign: "center",
+  },
+  metierBigBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  metierBigBadgeTxt: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+
   catPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -927,7 +1099,6 @@ const s = StyleSheet.create({
 
   bioTxt: { fontSize: 14, lineHeight: 21, fontWeight: "500" },
 
-  // ===== SAVE =====
   saveWrap: { borderRadius: 16, ...shadow.lg },
   save: {
     flexDirection: "row",
@@ -941,7 +1112,6 @@ const s = StyleSheet.create({
   cancelBtn: { alignItems: "center", paddingVertical: 12 },
   cancelTxt: { fontSize: 13, fontWeight: "700" },
 
-  // ===== LINK ROW =====
   linkRow: {
     flexDirection: "row",
     alignItems: "center",

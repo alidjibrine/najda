@@ -67,6 +67,17 @@ export default function AppLayout() {
     pathname === "/pro/profile" ||
     (pathname?.startsWith("/pro/") ?? false);
 
+  // Pages PARTAGÉES — accessibles par client ET pro depuis n'importe où
+  // (sans déclencher un re-routing vers /pro/dashboard ou /(tabs))
+  const isShared =
+    pathname === "/notifications" ||
+    pathname === "/favorites" ||
+    pathname === "/profile-edit" ||
+    (pathname?.startsWith("/artisan/") ?? false) ||
+    (pathname?.startsWith("/conversation/") ?? false) ||
+    (pathname?.startsWith("/booking/") ?? false) ||
+    (pathname?.startsWith("/reviews/") ?? false);
+
   // Si pas de profil → choix du rôle
   const needsRole = !profile;
   if (needsRole && !isRoleSelect) {
@@ -85,7 +96,8 @@ export default function AppLayout() {
     profile.role === "pro" &&
     !isProArea &&
     !isOnboarding &&
-    !isRoleSelect
+    !isRoleSelect &&
+    !isShared
   ) {
     return <Redirect href="/(app)/pro/dashboard" />;
   }

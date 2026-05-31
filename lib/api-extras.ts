@@ -175,7 +175,10 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 export interface ProProfile {
   id: string;
+  /** Métier principal (legacy) — utiliser categoryIds[0] désormais */
   categoryId: string | null;
+  /** Tous les métiers du pro (multi-compétence) */
+  categoryIds: string[];
   city: string | null;
   zoneKm: number;
   priceRange: string;
@@ -203,6 +206,11 @@ export async function getMyProProfile(): Promise<ProProfile | null> {
   return {
     id: data.id,
     categoryId: data.category_id,
+    categoryIds: Array.isArray(data.category_ids)
+      ? data.category_ids
+      : data.category_id
+      ? [data.category_id]
+      : [],
     city: data.city,
     zoneKm: data.zone_km ?? 15,
     priceRange: data.price_range ?? "€€",
@@ -225,7 +233,10 @@ export async function getMyProProfile(): Promise<ProProfile | null> {
 export async function upsertMyArtisanCard(input: {
   firstName: string;
   lastName: string;
-  categoryId: string;
+  /** Métier principal (legacy / 1 seul). Si categoryIds fourni, on prend le 1er. */
+  categoryId?: string;
+  /** Multi-métiers (plombier + électricien par ex.) */
+  categoryIds?: string[];
   city: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -241,6 +252,15 @@ export async function upsertMyArtisanCard(input: {
   const artisanId = `pro-${user.id.replace(/-/g, "").slice(0, 12)}`;
   const initials = `${input.firstName.charAt(0)}${input.lastName.charAt(0)}`.toUpperCase();
 
+  const ids = (input.categoryIds && input.categoryIds.length > 0
+    ? input.categoryIds
+    : input.categoryId
+    ? [input.categoryId]
+    : []
+  ).filter(Boolean);
+  const primary = ids[0];
+  if (!primary) throw new Error("Au moins un métier est requis.");
+
   const { error } = await supabase
     .from("artisans")
     .upsert({
@@ -248,7 +268,8 @@ export async function upsertMyArtisanCard(input: {
       first_name: input.firstName,
       last_name: input.lastName,
       initials,
-      category_id: input.categoryId,
+      category_id: primary, // métier principal
+      category_ids: ids, // tous les métiers
       city: input.city,
       latitude: input.latitude ?? null,
       longitude: input.longitude ?? null,
@@ -283,6 +304,14 @@ export async function upsertMyProProfile(
 
   const row: Record<string, unknown> = { id: user.id };
   if (input.categoryId !== undefined) row.category_id = input.categoryId;
+  if ((input as { categoryIds?: string[] }).categoryIds !== undefined) {
+    const ids = (input as { categoryIds?: string[] }).categoryIds ?? [];
+    row.category_ids = ids;
+    // Garde category_id sync avec le premier métier
+    if (ids.length > 0 && input.categoryId === undefined) {
+      row.category_id = ids[0];
+    }
+  }
   if (input.city !== undefined) row.city = input.city;
   if (input.zoneKm !== undefined) row.zone_km = input.zoneKm;
   if (input.priceRange !== undefined) row.price_range = input.priceRange;
@@ -306,6 +335,11 @@ export async function upsertMyProProfile(
   return {
     id: data.id,
     categoryId: data.category_id,
+    categoryIds: Array.isArray(data.category_ids)
+      ? data.category_ids
+      : data.category_id
+      ? [data.category_id]
+      : [],
     city: data.city,
     zoneKm: data.zone_km ?? 15,
     priceRange: data.price_range ?? "€€",
@@ -575,7 +609,9 @@ export async function getProStats(): Promise<ProStats> {
   // 3. Taux de complétion du profil pro
   const { data: pro } = await supabase
     .from("pro_profiles")
-    .select("category_id, city, bio, services, photos, years_exp, price_range")
+    .select(
+      "category_id, category_ids, city, bio, services, years_exp, price_range, zone_km",
+    )
     .eq("id", user.id)
     .maybeSingle();
   const { data: profile } = await supabase
@@ -584,17 +620,22 @@ export async function getProStats(): Promise<ProStats> {
     .eq("id", user.id)
     .maybeSingle();
 
+  // 10 critères atteignables (les photos ne sont plus exigées pour 100%)
+  const hasCategory =
+    !!pro?.category_id ||
+    (Array.isArray((pro as { category_ids?: string[] })?.category_ids) &&
+      ((pro as { category_ids?: string[] })?.category_ids?.length ?? 0) > 0);
   const checks = [
     !!profile?.first_name,
     !!profile?.last_name,
     !!profile?.phone,
     !!profile?.avatar_url,
-    !!pro?.category_id,
+    hasCategory,
     !!pro?.city,
     !!pro?.bio && pro.bio.length > 20,
     (pro?.services ?? []).length > 0,
-    (pro?.photos ?? []).length > 0,
     (pro?.years_exp ?? 0) > 0,
+    !!pro?.price_range,
   ];
   const completionPct = Math.round(
     (checks.filter(Boolean).length / checks.length) * 100,
@@ -653,4 +694,255 @@ export async function getMyReceivedReviews(): Promise<ProReview[]> {
     author: r.author,
     createdAt: r.created_at,
   }));
+}
+
+// =====================================================
+// MESSAGERIE CÔTÉ PRO
+// =====================================================
+
+export interface ProConversation {
+  id: string;
+  bookingId: string;
+  userId: string;
+  artisanId: string;
+  lastMessageText: string;
+  lastMessageAt: string | null;
+  proUnreadCount: number;
+  createdAt: string;
+  // Infos du client pour l'affichage
+  clientFirstName: string;
+  clientLastName: string;
+  clientAvatarUrl: string | null;
+  // Infos du booking
+  bookingService: string;
+  bookingDate: string;
+}
+
+export async function getProConversations(): Promise<ProConversation[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // Récupère artisan_id du pro
+  const { data: proRow } = await supabase
+    .from("pro_profiles")
+    .select("artisan_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  const artisanId = proRow?.artisan_id;
+  if (!artisanId) return [];
+
+  // Récupère les conversations + joint le profil client et le booking
+  const { data, error } = await supabase
+    .from("conversations")
+    .select(
+      `
+      *,
+      client:profiles!conversations_user_id_fkey(first_name, last_name, avatar_url),
+      booking:bookings(service, booking_date)
+    `,
+    )
+    .eq("artisan_id", artisanId)
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+
+  if (error) {
+    // Fallback : query simple sans jointures (selon RLS)
+    const { data: simple } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("artisan_id", artisanId)
+      .order("last_message_at", { ascending: false, nullsFirst: false });
+    return (simple ?? []).map((c) => ({
+      id: c.id,
+      bookingId: c.booking_id,
+      userId: c.user_id,
+      artisanId: c.artisan_id,
+      lastMessageText: c.last_message_text ?? "",
+      lastMessageAt: c.last_message_at,
+      proUnreadCount: c.pro_unread_count ?? 0,
+      createdAt: c.created_at,
+      clientFirstName: "",
+      clientLastName: "",
+      clientAvatarUrl: null,
+      bookingService: "",
+      bookingDate: "",
+    }));
+  }
+
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    bookingId: c.booking_id,
+    userId: c.user_id,
+    artisanId: c.artisan_id,
+    lastMessageText: c.last_message_text ?? "",
+    lastMessageAt: c.last_message_at,
+    proUnreadCount: c.pro_unread_count ?? 0,
+    createdAt: c.created_at,
+    clientFirstName: c.client?.first_name ?? "",
+    clientLastName: c.client?.last_name ?? "",
+    clientAvatarUrl: c.client?.avatar_url ?? null,
+    bookingService: c.booking?.service ?? "",
+    bookingDate: c.booking?.booking_date ?? "",
+  }));
+}
+
+export async function countProUnreadMessages(): Promise<number> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+  const { data: proRow } = await supabase
+    .from("pro_profiles")
+    .select("artisan_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!proRow?.artisan_id) return 0;
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("pro_unread_count")
+    .eq("artisan_id", proRow.artisan_id);
+  if (error) return 0;
+  return (data ?? []).reduce(
+    (acc, c) => acc + (c.pro_unread_count ?? 0),
+    0,
+  );
+}
+
+export async function markProConversationRead(
+  conversationId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("conversations")
+    .update({ pro_unread_count: 0 })
+    .eq("id", conversationId);
+  if (error) throw error;
+}
+
+export async function sendMessageAsArtisan(
+  conversationId: string,
+  text: string,
+): Promise<void> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Message vide.");
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_type: "artisan",
+    text: trimmed,
+  });
+  if (error) throw error;
+}
+
+// =====================================================
+// STATS PRO MENSUELLES (pour la page Stats)
+// =====================================================
+
+export interface MonthlyStat {
+  month: string; // 'YYYY-MM'
+  monthLabel: string; // 'janv. 2026'
+  missions: number;
+  revenueEur: number;
+}
+
+export async function getProMonthlyStats(
+  months: number = 6,
+): Promise<MonthlyStat[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("status, completed_at, price_estimate")
+    .eq("pro_id", user.id)
+    .in("status", ["completed", "reviewed"])
+    .not("completed_at", "is", null);
+
+  if (error) return [];
+
+  const safeData = data ?? [];
+
+  // Générer les N derniers mois
+  const result: MonthlyStat[] = [];
+  const now = new Date();
+  const MONTH_LABELS = [
+    "janv.",
+    "févr.",
+    "mars",
+    "avr.",
+    "mai",
+    "juin",
+    "juil.",
+    "août",
+    "sept.",
+    "oct.",
+    "nov.",
+    "déc.",
+  ];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+    result.push({
+      month: monthStr,
+      monthLabel: label,
+      missions: 0,
+      revenueEur: 0,
+    });
+  }
+
+  // Agréger les bookings par mois
+  safeData.forEach((b) => {
+    if (!b.completed_at) return;
+    const d = new Date(b.completed_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const row = result.find((r) => r.month === key);
+    if (row) {
+      row.missions += 1;
+      // Parser le prix
+      const m = (b.price_estimate ?? "")
+        .replace(/\s/g, "")
+        .match(/(\d+([.,]\d+)?)/);
+      if (m) row.revenueEur += parseFloat(m[1].replace(",", "."));
+    }
+  });
+
+  return result;
+}
+
+export interface TopService {
+  service: string;
+  count: number;
+  revenueEur: number;
+}
+
+export async function getProTopServices(): Promise<TopService[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("service, price_estimate")
+    .eq("pro_id", user.id)
+    .in("status", ["completed", "reviewed"]);
+
+  if (error) return [];
+  const safeData = data ?? [];
+
+  const map = new Map<string, TopService>();
+  safeData.forEach((b) => {
+    const svc = b.service ?? "Autre";
+    const row = map.get(svc) ?? { service: svc, count: 0, revenueEur: 0 };
+    row.count += 1;
+    const m = (b.price_estimate ?? "")
+      .replace(/\s/g, "")
+      .match(/(\d+([.,]\d+)?)/);
+    if (m) row.revenueEur += parseFloat(m[1].replace(",", "."));
+    map.set(svc, row);
+  });
+  return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
 }
